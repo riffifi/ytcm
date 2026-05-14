@@ -46,6 +46,109 @@ class ConversationsScreen extends StatelessWidget {
               itemBuilder: (context, i) =>
                   _ConversationTile(contact: contacts[i]),
             ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showNewChatModal(context),
+        backgroundColor: AppTheme.accent,
+        child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
+        tooltip: 'New chat',
+      ),
+    );
+  }
+
+  void _showNewChatModal(BuildContext context) {
+    final state = context.read<AppState>();
+    final contacts = state.contacts;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final controller = TextEditingController();
+        String? error;
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setState) => SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text('Start new chat', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.primary)),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Enter tag or username',
+                        errorText: error,
+                        filled: true,
+                        fillColor: AppTheme.surfaceHigh,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.border)),
+                      ),
+                      textInputAction: TextInputAction.done,
+                      onSubmitted: (_) async {
+                        final val = controller.text.trim();
+                        if (val.isEmpty) {
+                          setState(() => error = 'Please enter a tag');
+                          return;
+                        }
+                        Navigator.pop(ctx);
+                        // try to resolve username to existing contact
+                        final match = contacts.firstWhere(
+                            (c) => c.username.toLowerCase() == val.toLowerCase(),
+                            orElse: () => Connection(uuid: val, username: val));
+                        state.openChat(match.uuid, match.username);
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatScreen()));
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accent),
+                            onPressed: () {
+                              final val = controller.text.trim();
+                              if (val.isEmpty) {
+                                setState(() => error = 'Please enter a tag');
+                                return;
+                              }
+                              Navigator.pop(ctx);
+                              final match = contacts.firstWhere(
+                                  (c) => c.username.toLowerCase() == val.toLowerCase(),
+                                  orElse: () => Connection(uuid: val, username: val));
+                              state.openChat(match.uuid, match.username);
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatScreen()));
+                            },
+                            child: const Text('Start', style: TextStyle(color: Colors.white)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    if (contacts.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text('Tip: you can enter existing username (autocomplete not available)', style: const TextStyle(color: AppTheme.secondary, fontSize: 12)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
