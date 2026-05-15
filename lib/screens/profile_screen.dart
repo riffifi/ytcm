@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state.dart';
+import '../services/theme_preferences.dart';
 import '../theme.dart';
+import '../utils/messenger_snackbar.dart';
 import 'server_settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -33,11 +35,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mc;
     final state = context.watch<AppState>();
+    final themePrefs = context.watch<ThemePreferences>();
     final me = state.me;
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: c.bg,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, size: 18),
@@ -46,7 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         title: const Text('Profile'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: AppTheme.border),
+          child: Container(height: 1, color: c.border),
         ),
       ),
       body: ListView(
@@ -59,15 +63,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(
-                    color: AppTheme.accentSoft,
+                    color: c.accentSoft,
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppTheme.accent.withOpacity(0.3)),
+                    border: Border.all(color: c.accent.withOpacity(0.3)),
                   ),
                   child: Center(
                     child: Text(
                       me?.initials ?? '?',
-                      style: const TextStyle(
-                          color: AppTheme.accent,
+                      style: TextStyle(
+                          color: c.accent,
                           fontSize: 28,
                           fontWeight: FontWeight.w600),
                     ),
@@ -75,8 +79,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text('@${me?.username ?? ''}',
-                    style: const TextStyle(
-                        color: AppTheme.primary,
+                    style: TextStyle(
+                        color: c.primary,
                         fontSize: 18,
                         fontWeight: FontWeight.w600)),
                 const SizedBox(height: 4),
@@ -84,12 +88,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.surfaceHigh,
+                    color: c.surfaceHigh,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(me?.uuid ?? '',
-                      style: const TextStyle(
-                          color: AppTheme.secondary, fontSize: 10)),
+                      style: TextStyle(
+                          color: c.secondary, fontSize: 10)),
                 ),
               ],
             ),
@@ -99,13 +103,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 12),
           TextField(
             controller: _firstNameCtrl,
-            style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+            style: TextStyle(color: c.primary, fontSize: 15),
             decoration: const InputDecoration(hintText: 'First name'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _lastNameCtrl,
-            style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+            style: TextStyle(color: c.primary, fontSize: 15),
             decoration: const InputDecoration(hintText: 'Last name'),
           ),
           const SizedBox(height: 20),
@@ -113,7 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ? Container(
                   height: 50,
                   decoration: BoxDecoration(
-                    color: AppTheme.accent.withOpacity(0.5),
+                    color: c.accent.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(
@@ -128,30 +132,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
               : ElevatedButton(
                   onPressed: () async {
                     setState(() => _saving = true);
-                    final token = state.token!;
-                    await state.auth.changeFirstName(
-                        token, _firstNameCtrl.text.trim());
-                    await state.auth.changeLastName(
-                        token, _lastNameCtrl.text.trim());
+                    final ok = await state.updateProfile(
+                      firstName: _firstNameCtrl.text.trim(),
+                      lastName: _lastNameCtrl.text.trim(),
+                    );
                     setState(() => _saving = false);
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Profile updated'),
-                          backgroundColor: AppTheme.surface,
-                        ),
+                    if (!mounted) return;
+                    if (ok) {
+                      showMessengerSnackBar(context, 'Profile updated');
+                    } else {
+                      showMessengerSnackBar(
+                        context,
+                        'Could not update profile',
                       );
                     }
                   },
                   child: const Text('Save changes'),
                 ),
           const SizedBox(height: 32),
+          _SectionLabel('Appearance'),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: c.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: c.border),
+            ),
+            child: SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'Light theme',
+                style: TextStyle(color: c.primary, fontSize: 15),
+              ),
+              subtitle: Text(
+                'White background',
+                style: TextStyle(color: c.secondary, fontSize: 12),
+              ),
+              value: themePrefs.isLight,
+              activeThumbColor: Colors.white,
+              activeTrackColor: c.accent,
+              onChanged: (v) => themePrefs.setLight(v),
+            ),
+          ),
+          const SizedBox(height: 32),
           _SectionLabel('Account'),
           const SizedBox(height: 12),
           _ActionTile(
             icon: Icons.dns_outlined,
             label: 'Server settings',
-            color: AppTheme.secondary,
+            color: c.secondary,
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const ServerSettingsScreen())),
           ),
@@ -159,7 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _ActionTile(
             icon: Icons.logout,
             label: 'Sign out',
-            color: AppTheme.error,
+            color: c.error,
             onTap: () async {
               await state.logout();
               if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
@@ -176,14 +206,18 @@ class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-            color: AppTheme.secondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8),
-      );
+  Widget build(BuildContext context) {
+    final c = context.mc;
+    return Text(
+      text.toUpperCase(),
+      style: TextStyle(
+        color: c.secondary,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.8,
+      ),
+    );
+  }
 }
 
 class _ActionTile extends StatelessWidget {
@@ -201,14 +235,15 @@ class _ActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mc;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: AppTheme.surface,
+          color: c.surface,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.border),
+          border: Border.all(color: c.border),
         ),
         child: Row(
           children: [

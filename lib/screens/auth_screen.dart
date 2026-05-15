@@ -49,17 +49,17 @@ class _AuthScreenState extends State<AuthScreen>
     final width = MediaQuery.of(context).size.width;
 
     if (width >= 900) {
-      return _desktopLayout(state);
+      return _desktopLayout(context, state);
     } else if (width >= 600) {
-      return _tabletLayout(state);
+      return _tabletLayout(context, state);
     } else {
-      return _phoneLayout(state);
+      return _phoneLayout(context, state);
     }
   }
 
   // ─── Phone layout ────────────────────────────────────────────────────────────
 
-  Widget _phoneLayout(AppState state) {
+  Widget _phoneLayout(BuildContext context, AppState state) {
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -68,14 +68,17 @@ class _AuthScreenState extends State<AuthScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 56),
-              _brandHeader(),
+              _brandHeader(context),
               const SizedBox(height: 40),
-              _buildTabBar(),
+              _buildTabBar(context),
               const SizedBox(height: 28),
               Expanded(
                 child: TabBarView(
                   controller: _tab,
-                  children: [_loginForm(state), _registerForm(state)],
+                  children: [
+                    _loginForm(context, state),
+                    _registerForm(context, state),
+                  ],
                 ),
               ),
             ],
@@ -87,7 +90,8 @@ class _AuthScreenState extends State<AuthScreen>
 
   // ─── Tablet layout ───────────────────────────────────────────────────────────
 
-  Widget _tabletLayout(AppState state) {
+  Widget _tabletLayout(BuildContext context, AppState state) {
+    final c = context.mc;
     return Scaffold(
       body: SafeArea(
         child: Center(
@@ -98,25 +102,28 @@ class _AuthScreenState extends State<AuthScreen>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _brandHeader(),
+                  _brandHeader(context),
                   const SizedBox(height: 48),
                   Container(
                     decoration: BoxDecoration(
-                      color: AppTheme.surfaceHigh,
+                      color: c.surfaceHigh,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppTheme.border),
+                      border: Border.all(color: c.border),
                     ),
                     padding: const EdgeInsets.all(28),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildTabBar(),
+                        _buildTabBar(context),
                         const SizedBox(height: 28),
                         SizedBox(
                           height: 420,
                           child: TabBarView(
                             controller: _tab,
-                            children: [_loginForm(state), _registerForm(state)],
+                            children: [
+                              _loginForm(context, state),
+                              _registerForm(context, state),
+                            ],
                           ),
                         ),
                       ],
@@ -133,7 +140,8 @@ class _AuthScreenState extends State<AuthScreen>
 
   // ─── Desktop layout ──────────────────────────────────────────────────────────
 
-  Widget _desktopLayout(AppState state) {
+  Widget _desktopLayout(BuildContext context, AppState state) {
+    final c = context.mc;
     return Scaffold(
       body: Row(
         children: [
@@ -141,7 +149,7 @@ class _AuthScreenState extends State<AuthScreen>
           Expanded(
             flex: 5,
             child: Container(
-              color: AppTheme.surface,
+              color: c.surface,
               padding: const EdgeInsets.symmetric(horizontal: 64, vertical: 56),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,7 +160,7 @@ class _AuthScreenState extends State<AuthScreen>
                     style: TextStyle(
                       fontSize: 52,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.primary,
+                      color: c.primary,
                       letterSpacing: -1.5,
                     ),
                   ),
@@ -161,29 +169,29 @@ class _AuthScreenState extends State<AuthScreen>
                     'Minimal. Secure. Fast.',
                     style: TextStyle(
                       fontSize: 18,
-                      color: AppTheme.secondary,
+                      color: c.secondary,
                       fontWeight: FontWeight.w400,
                     ),
                   ),
                   const SizedBox(height: 48),
-                  _featurePill(Icons.lock_outline, 'End-to-end encrypted'),
+                  _featurePill(context, Icons.lock_outline, 'End-to-end encrypted'),
                   const SizedBox(height: 12),
-                  _featurePill(Icons.bolt_outlined, 'Real-time messaging'),
+                  _featurePill(context, Icons.bolt_outlined, 'Real-time messaging'),
                   const SizedBox(height: 12),
-                  _featurePill(Icons.devices_outlined, 'Cross-platform'),
+                  _featurePill(context, Icons.devices_outlined, 'Cross-platform'),
                   const Spacer(),
-                  _serverBadge(),
+                  _serverBadge(context),
                 ],
               ),
             ),
           ),
           // Divider
-          Container(width: 1, color: AppTheme.border),
+          Container(width: 1, color: c.border),
           // Right form panel
           Expanded(
             flex: 4,
             child: Container(
-              color: AppTheme.surfaceHigh,
+              color: c.surfaceHigh,
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 400),
@@ -193,15 +201,15 @@ class _AuthScreenState extends State<AuthScreen>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildTabBar(),
+                        _buildTabBar(context),
                         const SizedBox(height: 32),
                         SizedBox(
                           height: 440,
                           child: TabBarView(
                             controller: _tab,
                             children: [
-                              _loginForm(context.watch<AppState>()),
-                              _registerForm(context.watch<AppState>()),
+                              _loginForm(context, state),
+                              _registerForm(context, state),
                             ],
                           ),
                         ),
@@ -217,27 +225,29 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
-  Widget _featurePill(IconData icon, String label) {
+  Widget _featurePill(BuildContext context, IconData icon, String label) {
+    final c = context.mc;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: AppTheme.accentSoft,
+            color: c.accentSoft,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: AppTheme.accent, size: 16),
+          child: Icon(icon, color: c.accent, size: 16),
         ),
         const SizedBox(width: 12),
         Text(label,
-            style: const TextStyle(
-                color: AppTheme.secondary, fontSize: 14)),
+            style: TextStyle(
+                color: c.secondary, fontSize: 14)),
       ],
     );
   }
 
-  Widget _serverBadge() {
+  Widget _serverBadge(BuildContext context) {
+    final c = context.mc;
     return Consumer<ServerSettings>(
       builder: (_, s, __) => GestureDetector(
         onTap: () => Navigator.push(
@@ -247,20 +257,20 @@ class _AuthScreenState extends State<AuthScreen>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           decoration: BoxDecoration(
-            color: AppTheme.surface,
+            color: c.surface,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppTheme.border),
+            border: Border.all(color: c.border),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.dns_outlined,
-                  color: AppTheme.secondary, size: 14),
+              Icon(Icons.dns_outlined,
+                  color: c.secondary, size: 14),
               const SizedBox(width: 6),
               Text(
                 _hostOnly(s.authUrl),
-                style: const TextStyle(
-                    color: AppTheme.secondary, fontSize: 12),
+                style: TextStyle(
+                    color: c.secondary, fontSize: 12),
               ),
             ],
           ),
@@ -271,7 +281,8 @@ class _AuthScreenState extends State<AuthScreen>
 
   // ─── Shared header (phone / tablet) ──────────────────────────────────────────
 
-  Widget _brandHeader() {
+  Widget _brandHeader(BuildContext context) {
+    final c = context.mc;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -299,21 +310,21 @@ class _AuthScreenState extends State<AuthScreen>
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: AppTheme.surfaceHigh,
+              color: c.surfaceHigh,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.border),
+              border: Border.all(color: c.border),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.dns_outlined,
-                    color: AppTheme.secondary, size: 13),
+                Icon(Icons.dns_outlined,
+                    color: c.secondary, size: 13),
                 const SizedBox(width: 5),
                 Consumer<ServerSettings>(
                   builder: (_, s, __) => Text(
                     _hostOnly(s.authUrl),
-                    style: const TextStyle(
-                      color: AppTheme.secondary,
+                    style: TextStyle(
+                      color: c.secondary,
                       fontSize: 11,
                     ),
                   ), // ← FIX: was missing closing ) for Text(
@@ -328,23 +339,24 @@ class _AuthScreenState extends State<AuthScreen>
 
   // ─── Tab bar ─────────────────────────────────────────────────────────────────
 
-  Widget _buildTabBar() {
+  Widget _buildTabBar(BuildContext context) {
+    final c = context.mc;
     return Container(
       height: 40,
       decoration: BoxDecoration(
-        color: AppTheme.surfaceHigh,
+        color: c.surfaceHigh,
         borderRadius: BorderRadius.circular(10),
       ),
       child: TabBar(
         controller: _tab,
         dividerColor: Colors.transparent,
         indicator: BoxDecoration(
-          color: AppTheme.accent,
+          color: c.accent,
           borderRadius: BorderRadius.circular(8),
         ),
         indicatorSize: TabBarIndicatorSize.tab,
         labelColor: Colors.white,
-        unselectedLabelColor: AppTheme.secondary,
+        unselectedLabelColor: c.secondary,
         labelStyle:
             const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
         tabs: const [Tab(text: 'Sign in'), Tab(text: 'Register')],
@@ -354,7 +366,8 @@ class _AuthScreenState extends State<AuthScreen>
 
   // ─── Login form ───────────────────────────────────────────────────────────────
 
-  Widget _loginForm(AppState state) {
+  Widget _loginForm(BuildContext context, AppState state) {
+    final c = context.mc;
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,13 +384,13 @@ class _AuthScreenState extends State<AuthScreen>
                       horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: selected
-                        ? AppTheme.accentSoft
+                        ? c.accentSoft
                         : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                         color: selected
-                            ? AppTheme.accent
-                            : AppTheme.border),
+                            ? c.accent
+                            : c.border),
                   ),
                   child: Text(
                     t == 'email' ? 'Email' : 'Phone',
@@ -385,8 +398,8 @@ class _AuthScreenState extends State<AuthScreen>
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                       color: selected
-                          ? AppTheme.accent
-                          : AppTheme.secondary,
+                          ? c.accent
+                          : c.secondary,
                     ),
                   ),
                 ),
@@ -399,7 +412,7 @@ class _AuthScreenState extends State<AuthScreen>
             keyboardType: _loginType == 'email'
                 ? TextInputType.emailAddress
                 : TextInputType.phone,
-            style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+            style: TextStyle(color: c.primary, fontSize: 15),
             decoration: InputDecoration(
               hintText: _loginType == 'email' ? 'Email' : 'Phone number',
             ),
@@ -408,7 +421,7 @@ class _AuthScreenState extends State<AuthScreen>
           TextField(
             controller: _passCtrl,
             obscureText: _obscure,
-            style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+            style: TextStyle(color: c.primary, fontSize: 15),
             decoration: InputDecoration(
               hintText: 'Password',
               suffixIcon: GestureDetector(
@@ -417,7 +430,7 @@ class _AuthScreenState extends State<AuthScreen>
                   _obscure
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
-                  color: AppTheme.secondary,
+                  color: c.secondary,
                   size: 18,
                 ),
               ),
@@ -425,11 +438,11 @@ class _AuthScreenState extends State<AuthScreen>
           ),
           if (state.error != null) ...[
             const SizedBox(height: 12),
-            _errorBanner(state.error!),
+            _errorBanner(context, state.error!),
           ],
           const SizedBox(height: 24),
           state.loading
-              ? _loadingButton()
+              ? _loadingButton(context)
               : ElevatedButton(
                   onPressed: () async {
                     await context.read<AppState>().login(
@@ -447,34 +460,35 @@ class _AuthScreenState extends State<AuthScreen>
 
   // ─── Register form ────────────────────────────────────────────────────────────
 
-  Widget _registerForm(AppState state) {
+  Widget _registerForm(BuildContext context, AppState state) {
+    final c = context.mc;
     return SingleChildScrollView(
       child: Column(
         children: [
           TextField(
             controller: _usernameCtrl,
-            style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+            style: TextStyle(color: c.primary, fontSize: 15),
             decoration: const InputDecoration(hintText: 'Username'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+            style: TextStyle(color: c.primary, fontSize: 15),
             decoration: const InputDecoration(hintText: 'Email'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _phoneCtrl,
             keyboardType: TextInputType.phone,
-            style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+            style: TextStyle(color: c.primary, fontSize: 15),
             decoration: const InputDecoration(hintText: 'Phone number'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _regPassCtrl,
             obscureText: _obscureReg,
-            style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+            style: TextStyle(color: c.primary, fontSize: 15),
             decoration: InputDecoration(
               hintText: 'Password',
               suffixIcon: GestureDetector(
@@ -484,7 +498,7 @@ class _AuthScreenState extends State<AuthScreen>
                   _obscureReg
                       ? Icons.visibility_off_outlined
                       : Icons.visibility_outlined,
-                  color: AppTheme.secondary,
+                  color: c.secondary,
                   size: 18,
                 ),
               ),
@@ -492,11 +506,11 @@ class _AuthScreenState extends State<AuthScreen>
           ),
           if (state.error != null) ...[
             const SizedBox(height: 12),
-            _errorBanner(state.error!),
+            _errorBanner(context, state.error!),
           ],
           const SizedBox(height: 24),
           state.loading
-              ? _loadingButton()
+              ? _loadingButton(context)
               : ElevatedButton(
                   onPressed: () async {
                     final ok =
@@ -509,10 +523,12 @@ class _AuthScreenState extends State<AuthScreen>
                     if (ok && mounted) {
                       _tab.animateTo(0);
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('Account created — sign in now'),
-                          backgroundColor: AppTheme.surface,
+                        SnackBar(
+                          content: Text(
+                            'Account created — sign in now',
+                            style: TextStyle(color: c.primary),
+                          ),
+                          backgroundColor: c.surfaceHigh,
                         ),
                       );
                     }
@@ -526,28 +542,30 @@ class _AuthScreenState extends State<AuthScreen>
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  Widget _errorBanner(String msg) {
+  Widget _errorBanner(BuildContext context, String msg) {
+    final c = context.mc;
     return Container(
       width: double.infinity,
       padding:
           const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: AppTheme.error.withValues(alpha: 0.1),   // FIX: was withOpacity
+        color: c.error.withValues(alpha: 0.1),   // FIX: was withOpacity
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-            color: AppTheme.error.withValues(alpha: 0.3)),         // FIX: was withOpacity
+            color: c.error.withValues(alpha: 0.3)),         // FIX: was withOpacity
       ),
       child: Text(msg,
-          style: const TextStyle(color: AppTheme.error, fontSize: 13)),
+          style: TextStyle(color: c.error, fontSize: 13)),
     );
   }
 
-  Widget _loadingButton() {
+  Widget _loadingButton(BuildContext context) {
+    final c = context.mc;
     return Container(
       height: 50,
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppTheme.accent.withValues(alpha: 0.5),             // FIX: was withOpacity
+        color: c.accent.withValues(alpha: 0.5),             // FIX: was withOpacity
         borderRadius: BorderRadius.circular(12),
       ),
       child: const Center(
@@ -562,13 +580,20 @@ class _AuthScreenState extends State<AuthScreen>
   }
 
   String _hostOnly(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) return 'Not set';
+
     try {
-      final uri = Uri.parse(url);
-      final host = uri.host.isEmpty ? url : uri.host;
-      final port = uri.hasPort ? ':${uri.port}' : '';
-      return '$host$port';
-    } catch (_) {
-      return url;
-    }
+      var uri = Uri.parse(trimmed);
+      if (!uri.hasScheme && uri.host.isEmpty) {
+        uri = Uri.parse('http://$trimmed');
+      }
+      if (uri.host.isNotEmpty) {
+        final port = uri.hasPort ? ':${uri.port}' : '';
+        return '${uri.host}$port';
+      }
+    } catch (_) {}
+
+    return trimmed;
   }
 }

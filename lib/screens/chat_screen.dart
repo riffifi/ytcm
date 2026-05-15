@@ -54,6 +54,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mc;
     final state = context.watch<AppState>();
     final messages = state.getMessages(state.activeChatUserId ?? '');
     final me = state.me;
@@ -61,13 +62,13 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
     return Scaffold(
-      backgroundColor: AppTheme.bg,
-      appBar: _buildAppBar(state),
+      backgroundColor: c.bg,
+      appBar: _buildAppBar(context, state),
       body: Column(
         children: [
           Expanded(
             child: messages.isEmpty
-                ? _emptyState(state.activeChatUsername ?? '')
+                ? _emptyState(context, state.activeChatUsername ?? '')
                 : ListView.builder(
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.symmetric(
@@ -80,20 +81,29 @@ class _ChatScreenState extends State<ChatScreen> {
                           !_sameDay(messages[i - 1].createdAt, msg.createdAt);
                       return Column(
                         children: [
-                          if (showDate) _DateDivider(date: msg.createdAt),
-                          _MessageBubble(message: msg, isMe: isMe),
+                          if (showDate)
+                            _DateDivider(
+                              screenContext: context,
+                              date: msg.createdAt,
+                            ),
+                          _MessageBubble(
+                            screenContext: context,
+                            message: msg,
+                            isMe: isMe,
+                          ),
                         ],
                       );
                     },
                   ),
           ),
-          _buildInputBar(),
+          _buildInputBar(context),
         ],
       ),
     );
   }
 
-  AppBar _buildAppBar(AppState state) {
+  AppBar _buildAppBar(BuildContext context, AppState state) {
+    final c = context.mc;
     return AppBar(
       leading: IconButton(
         icon: const Icon(Icons.arrow_back_ios, size: 18),
@@ -108,14 +118,14 @@ class _ChatScreenState extends State<ChatScreen> {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: AppTheme.surfaceHigh,
+              color: c.surfaceHigh,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Center(
               child: Text(
                 (state.activeChatUsername ?? '?')[0].toUpperCase(),
-                style: const TextStyle(
-                    color: AppTheme.secondary,
+                style: TextStyle(
+                    color: c.secondary,
                     fontSize: 14,
                     fontWeight: FontWeight.w600),
               ),
@@ -123,37 +133,39 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(width: 10),
           Text(state.activeChatUsername ?? '',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
         ],
       ),
       bottom: PreferredSize(
         preferredSize: const Size.fromHeight(1),
-        child: Container(height: 1, color: AppTheme.border),
+        child: Container(height: 1, color: c.border),
       ),
     );
   }
 
-  Widget _emptyState(String username) {
+  Widget _emptyState(BuildContext context, String username) {
+    final c = context.mc;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.waving_hand_outlined,
-              color: AppTheme.secondary, size: 32),
+          Icon(Icons.waving_hand_outlined,
+              color: c.secondary, size: 32),
           const SizedBox(height: 12),
           Text('Say hi to $username',
-              style: const TextStyle(
-                  color: AppTheme.secondary, fontSize: 14)),
+              style: TextStyle(
+                  color: c.secondary, fontSize: 14)),
         ],
       ),
     );
   }
 
-  Widget _buildInputBar() {
+  Widget _buildInputBar(BuildContext context) {
+    final c = context.mc;
     return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.bg,
-        border: Border(top: BorderSide(color: AppTheme.border)),
+      decoration: BoxDecoration(
+        color: c.bg,
+        border: Border(top: BorderSide(color: c.border)),
       ),
       padding: EdgeInsets.fromLTRB(
           16, 10, 16, MediaQuery.of(context).padding.bottom + 10),
@@ -164,15 +176,15 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Container(
               constraints: const BoxConstraints(maxHeight: 120),
               decoration: BoxDecoration(
-                color: AppTheme.surfaceHigh,
+                color: c.surfaceHigh,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppTheme.border),
+                border: Border.all(color: c.border),
               ),
               child: TextField(
                 controller: _textCtrl,
                 maxLines: null,
                 textCapitalization: TextCapitalization.sentences,
-                style: const TextStyle(color: AppTheme.primary, fontSize: 15),
+                style: TextStyle(color: c.primary, fontSize: 15),
                 decoration: const InputDecoration(
                   hintText: 'Message',
                   border: InputBorder.none,
@@ -191,14 +203,14 @@ class _ChatScreenState extends State<ChatScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: _hasText ? AppTheme.accent : AppTheme.surfaceHigh,
+              color: _hasText ? c.accent : c.surfaceHigh,
               borderRadius: BorderRadius.circular(12),
             ),
             child: IconButton(
               padding: EdgeInsets.zero,
               icon: Icon(
                 Icons.arrow_upward_rounded,
-                color: _hasText ? Colors.white : AppTheme.secondary,
+                color: _hasText ? Colors.white : c.secondary,
                 size: 18,
               ),
               onPressed: _hasText ? _send : null,
@@ -214,12 +226,18 @@ class _ChatScreenState extends State<ChatScreen> {
 }
 
 class _MessageBubble extends StatelessWidget {
+  final BuildContext screenContext;
   final Message message;
   final bool isMe;
-  const _MessageBubble({required this.message, required this.isMe});
+  const _MessageBubble({
+    required this.screenContext,
+    required this.message,
+    required this.isMe,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final c = screenContext.mc;
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Align(
@@ -231,7 +249,7 @@ class _MessageBubble extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
             decoration: BoxDecoration(
-              color: isMe ? AppTheme.bubbleOut : AppTheme.bubbleIn,
+              color: isMe ? c.bubbleOut : c.bubbleIn,
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
@@ -240,8 +258,8 @@ class _MessageBubble extends StatelessWidget {
               ),
               border: Border.all(
                 color: isMe
-                    ? AppTheme.bubbleOutBorder
-                    : AppTheme.bubbleInBorder,
+                    ? c.bubbleOutBorder
+                    : c.bubbleInBorder,
                 width: 1,
               ),
             ),
@@ -249,24 +267,27 @@ class _MessageBubble extends StatelessWidget {
               crossAxisAlignment:
                   isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               children: [
-                if (message.text != null)
+                if (message.previewText.isNotEmpty)
                   Text(
-                    message.text!,
-                    style: const TextStyle(
-                        color: AppTheme.primary, fontSize: 15, height: 1.4),
+                    message.previewText,
+                    style: TextStyle(
+                        color: c.primary, fontSize: 15, height: 1.4),
                   ),
-                const SizedBox(height: 4),
+                if (message.previewText.isNotEmpty) const SizedBox(height: 4),
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       DateFormat('HH:mm').format(message.createdAt),
-                      style: const TextStyle(
-                          color: AppTheme.tertiary, fontSize: 10),
+                      style: TextStyle(
+                          color: c.tertiary, fontSize: 10),
                     ),
                     if (isMe) ...[
                       const SizedBox(width: 4),
-                      _StatusIcon(status: message.status),
+                      _StatusIcon(
+                        screenContext: screenContext,
+                        status: message.status,
+                      ),
                     ],
                   ],
                 ),
@@ -280,27 +301,31 @@ class _MessageBubble extends StatelessWidget {
 }
 
 class _StatusIcon extends StatelessWidget {
+  final BuildContext screenContext;
   final int status;
-  const _StatusIcon({required this.status});
+  const _StatusIcon({required this.screenContext, required this.status});
 
   @override
   Widget build(BuildContext context) {
+    final c = screenContext.mc;
     if (status == 2) {
-      return const Icon(Icons.done_all, size: 12, color: AppTheme.accent);
+      return Icon(Icons.done_all, size: 12, color: c.accent);
     } else if (status == 1) {
-      return const Icon(Icons.done_all, size: 12, color: AppTheme.tertiary);
+      return Icon(Icons.done_all, size: 12, color: c.tertiary);
     } else {
-      return const Icon(Icons.access_time, size: 10, color: AppTheme.tertiary);
+      return Icon(Icons.access_time, size: 10, color: c.tertiary);
     }
   }
 }
 
 class _DateDivider extends StatelessWidget {
+  final BuildContext screenContext;
   final DateTime date;
-  const _DateDivider({required this.date});
+  const _DateDivider({required this.screenContext, required this.date});
 
   @override
   Widget build(BuildContext context) {
+    final c = screenContext.mc;
     final now = DateTime.now();
     String label;
     if (date.year == now.year &&
@@ -319,16 +344,16 @@ class _DateDivider extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          const Expanded(child: Divider(color: AppTheme.border)),
+          Expanded(child: Divider(color: c.border)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(label,
-                style: const TextStyle(
-                    color: AppTheme.tertiary,
+                style: TextStyle(
+                    color: c.tertiary,
                     fontSize: 11,
                     fontWeight: FontWeight.w500)),
           ),
-          const Expanded(child: Divider(color: AppTheme.border)),
+          Expanded(child: Divider(color: c.border)),
         ],
       ),
     );

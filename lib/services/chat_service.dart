@@ -10,20 +10,25 @@ class ChatService {
   bool _joined = false;
 
   final _messageController = StreamController<Message>.broadcast();
-  final _historyController = StreamController<Map<String, List<Message>>>.broadcast();
-  final _connectionsController = StreamController<List<Connection>>.broadcast();
+  final _historyController =
+      StreamController<Map<String, List<Message>>>.broadcast();
+  final _connectionsController =
+      StreamController<List<Connection>>.broadcast();
   final _joinController = StreamController<UserInfo>.broadcast();
   final _readReceiptController = StreamController<String>.broadcast();
   final _errorController = StreamController<String>.broadcast();
   final _connectionStateController = StreamController<bool>.broadcast();
+  final _pongController = StreamController<void>.broadcast();
 
   Stream<Message> get messages => _messageController.stream;
-  Stream<Map<String, List<Message>>> get historyEvents => _historyController.stream;
+  Stream<Map<String, List<Message>>> get historyEvents =>
+      _historyController.stream;
   Stream<List<Connection>> get connections => _connectionsController.stream;
   Stream<UserInfo> get joinEvents => _joinController.stream;
   Stream<String> get readReceipts => _readReceiptController.stream;
   Stream<String> get errors => _errorController.stream;
   Stream<bool> get connectionState => _connectionStateController.stream;
+  Stream<void> get pongs => _pongController.stream;
 
   bool get isConnected => _channel != null && _joined;
 
@@ -31,8 +36,10 @@ class ChatService {
 
   Future<void> connect(String token) async {
     _token = token;
+    _joined = false;
     try {
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+      await _channel!.ready.timeout(const Duration(seconds: 10));
       _connectionStateController.add(true);
       _channel!.stream.listen(
         _handleMessage,
@@ -45,11 +52,48 @@ class ChatService {
           _connectionStateController.add(false);
         },
       );
-      // Send join
       _send({'action': 'join', 'session_token': token});
     } catch (e) {
       _connectionStateController.add(false);
+      _errorController.add('WebSocket connection failed: $e');
     }
+  }
+
+  /// Opens the socket briefly to verify reachability (no join).
+  Future<String> pingReachability() async {
+    WebSocketChannel? probe;
+    try {
+      probe = WebSocketChannel.connect(Uri.parse(wsUrl));
+      await probe.ready.timeout(const Duration(seconds: 8));
+      await probe.sink.close();
+      return 'Reachable (WebSocket open)';
+    } catch (e) {
+      return 'Failed: $e';
+    } finally {
+      try {
+        await probe?.sink.close();
+      } catch (_) {}
+    }
+  }
+
+  Future<String> pingSession() async {
+    if (_token == null || !_joined) {
+      return 'Not connected — sign in first for a full ping';
+    }
+    final completer = Completer<String>();
+    late StreamSubscription<void> sub;
+    sub = pongs.listen((_) {
+      if (!completer.isCompleted) completer.complete('Pong received');
+      sub.cancel();
+    });
+    ping();
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!completer.isCompleted) {
+        completer.complete('No pong within 5s');
+        sub.cancel();
+      }
+    });
+    return completer.future;
   }
 
   void _handleMessage(dynamic raw) {
@@ -60,33 +104,41 @@ class ChatService {
         case 'joined':
           _joined = true;
           _joinController.add(UserInfo(
-            uuid: json['user_id'],
-            username: json['username'],
+            uuid: json['user_id'] as String,
+            username: json['username'] as String,
           ));
           break;
         case 'message':
-          _messageController.add(Message.fromJson(json['message']));
+          _messageController.add(
+              Message.fromJson(json['message'] as Map<String, dynamic>));
           break;
         case 'history':
           final msgs = (json['messages'] as List)
-              .map((m) => Message.fromJson(m))
+              .map((m) => Message.fromJson(m as Map<String, dynamic>))
               .toList();
-          _historyController.add({json['with_user_id']: msgs});
+          _historyController.add({
+            json['with_user_id'] as String: msgs,
+          });
           break;
         case 'connections':
           final conns = (json['connections'] as List)
-              .map((c) => Connection.fromJson(c))
+              .map((c) => Connection.fromJson(c as Map<String, dynamic>))
               .toList();
           _connectionsController.add(conns);
           break;
         case 'read_receipt':
-          _readReceiptController.add(json['by_user_id']);
+          _readReceiptController.add(json['by_user_id'] as String);
+          break;
+        case 'pong':
+          _pongController.add(null);
           break;
         case 'error':
-          _errorController.add(json['message'] ?? 'Unknown error');
+          _errorController.add(json['message'] as String? ?? 'Unknown error');
           break;
       }
-    } catch (_) {}
+    } catch (e) {
+      _errorController.add('Failed to parse server message: $e');
+    }
   }
 
   void _send(Map<String, dynamic> data) {
@@ -143,5 +195,6 @@ class ChatService {
     _readReceiptController.close();
     _errorController.close();
     _connectionStateController.close();
+    _pongController.close();
   }
 }

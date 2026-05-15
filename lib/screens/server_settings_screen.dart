@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
+import '../services/chat_service.dart';
 import '../services/server_settings.dart';
 import '../services/app_state.dart';
 import '../theme.dart';
+import '../utils/messenger_snackbar.dart';
 
 class ServerSettingsScreen extends StatefulWidget {
   const ServerSettingsScreen({super.key});
@@ -15,6 +18,10 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
   late TextEditingController _authCtrl;
   late TextEditingController _chatCtrl;
   bool _saving = false;
+  String? _authPingResult;
+  String? _chatPingResult;
+  bool _pingingAuth = false;
+  bool _pingingChat = false;
 
   @override
   void initState() {
@@ -46,18 +53,12 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
 
     setState(() => _saving = true);
     await context.read<ServerSettings>().save(authUrl, chatUrl);
-    // Reconnect if logged in
     if (mounted) {
       await context.read<AppState>().reconnectWithNewSettings();
     }
     setState(() => _saving = false);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Settings saved'),
-          backgroundColor: AppTheme.surface,
-        ),
-      );
+      showMessengerSnackBar(context, 'Settings saved');
       Navigator.pop(context);
     }
   }
@@ -68,29 +69,76 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     setState(() {
       _authCtrl.text = ServerSettings.defaultAuthUrl;
       _chatCtrl.text = ServerSettings.defaultChatUrl;
+      _authPingResult = null;
+      _chatPingResult = null;
     });
   }
 
-  bool _isValidUrl(String url, {bool requireHttp = false, bool requireWs = false}) {
+  Future<void> _pingAuth() async {
+    setState(() {
+      _pingingAuth = true;
+      _authPingResult = null;
+    });
+    final result =
+        await AuthService(baseUrl: _authCtrl.text.trim()).ping();
+    if (mounted) {
+      setState(() {
+        _pingingAuth = false;
+        _authPingResult = result;
+      });
+    }
+  }
+
+  Future<void> _pingChat() async {
+    setState(() {
+      _pingingChat = true;
+      _chatPingResult = null;
+    });
+    final state = context.read<AppState>();
+    final wsUrl = _chatCtrl.text.trim();
+
+    var result = await ChatService(wsUrl: wsUrl).pingReachability();
+    if (state.isLoggedIn) {
+      final sessionResult = await state.pingChatSession();
+      result = '$result\n$sessionResult';
+    }
+
+    if (mounted) {
+      setState(() {
+        _pingingChat = false;
+        _chatPingResult = result;
+      });
+    }
+  }
+
+  bool _isValidUrl(String url,
+      {bool requireHttp = false, bool requireWs = false}) {
     if (url.isEmpty) return false;
-    if (requireHttp) return url.startsWith('http://') || url.startsWith('https://');
+    if (requireHttp) {
+      return url.startsWith('http://') || url.startsWith('https://');
+    }
     if (requireWs) return url.startsWith('ws://') || url.startsWith('wss://');
     return true;
   }
 
   void _showError(String msg) {
+    final c = context.mc;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg),
-        backgroundColor: AppTheme.error.withOpacity(0.9),
+        content: Text(msg, style: TextStyle(color: c.primary)),
+        backgroundColor: c.error.withValues(alpha: 0.92),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.mc;
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      backgroundColor: AppTheme.bg,
+      backgroundColor: c.bg,
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios, size: 18),
@@ -99,48 +147,64 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
         title: const Text('Server settings'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: AppTheme.border),
+          child: Container(height: 1, color: c.border),
         ),
       ),
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
         children: [
-          _infoBox(),
-          const SizedBox(height: 24),
-          _label('Auth service'),
+          _infoBox(context),
+          const SizedBox(height: 20),
+          _label(context, 'Auth service'),
           const SizedBox(height: 8),
           TextField(
             controller: _authCtrl,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'http://127.0.0.1:3000',
               prefixIcon: Icon(Icons.lock_outline,
-                  color: AppTheme.secondary, size: 16),
+                  color: c.secondary, size: 16),
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
           ),
+          const SizedBox(height: 8),
+          _pingRow(
+            context: context,
+            label: 'Test auth',
+            loading: _pingingAuth,
+            result: _authPingResult,
+            onPressed: _pingAuth,
+          ),
           const SizedBox(height: 6),
-          Text('HTTP — used for login, register, profile',
+          Text('HTTP — login, register, profile',
               style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 20),
-          _label('Chat service'),
+          _label(context, 'Chat service'),
           const SizedBox(height: 8),
           TextField(
             controller: _chatCtrl,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'ws://127.0.0.1:3001/ws',
               prefixIcon: Icon(Icons.swap_horiz,
-                  color: AppTheme.secondary, size: 16),
+                  color: c.secondary, size: 16),
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
           ),
+          const SizedBox(height: 8),
+          _pingRow(
+            context: context,
+            label: 'Test chat',
+            loading: _pingingChat,
+            result: _chatPingResult,
+            onPressed: _pingChat,
+          ),
           const SizedBox(height: 6),
-          Text('WebSocket — used for real-time messaging',
+          Text('WebSocket — real-time messaging',
               style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
           _saving
-              ? _loadingButton()
+              ? _loadingButton(context)
               : ElevatedButton(
                   onPressed: _save,
                   child: const Text('Save & apply'),
@@ -155,25 +219,65 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     );
   }
 
-  Widget _infoBox() {
+  Widget _pingRow({
+    required BuildContext context,
+    required String label,
+    required bool loading,
+    required String? result,
+    required VoidCallback onPressed,
+  }) {
+    final c = context.mc;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: loading ? null : onPressed,
+          icon: loading
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.network_ping, size: 16),
+          label: Text(label),
+        ),
+        if (result != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            result,
+            style: TextStyle(
+              color: result.startsWith('Failed') || result.contains('Not connected')
+                  ? c.error
+                  : c.accent,
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _infoBox(BuildContext context) {
+    final c = context.mc;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.accentSoft,
+        color: c.accentSoft,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.accent.withOpacity(0.25)),
+        border: Border.all(color: c.accent.withValues(alpha: 0.25)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: AppTheme.accent, size: 16),
+          Icon(Icons.info_outline, color: c.accent, size: 16),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Configure the addresses of your Rust messenger backend. '
-              'Changes take effect immediately.',
+              'On Android emulator use 10.0.2.2 instead of 127.0.0.1. '
+              'On a physical device use your computer\'s LAN IP.',
               style: TextStyle(
-                color: AppTheme.accent.withOpacity(0.85),
+                color: c.accent.withValues(alpha: 0.85),
                 fontSize: 12,
                 height: 1.5,
               ),
@@ -184,20 +288,26 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     );
   }
 
-  Widget _label(String text) => Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-            color: AppTheme.secondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.8),
-      );
+  Widget _label(BuildContext context, String text) {
+    final c = context.mc;
+    return Text(
+      text.toUpperCase(),
+      style: TextStyle(
+        color: c.secondary,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        letterSpacing: 0.8,
+      ),
+    );
+  }
 
-  Widget _loadingButton() => Container(
+  Widget _loadingButton(BuildContext context) {
+    final c = context.mc;
+    return Container(
         height: 50,
         width: double.infinity,
         decoration: BoxDecoration(
-          color: AppTheme.accent.withOpacity(0.5),
+          color: c.accent.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Center(
@@ -209,4 +319,5 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           ),
         ),
       );
+  }
 }

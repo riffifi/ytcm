@@ -3,16 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/app_state.dart';
 import 'services/server_settings.dart';
+import 'services/theme_preferences.dart';
 import 'screens/auth_screen.dart';
 import 'screens/conversations_screen.dart';
 import 'theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
   runApp(const App());
 }
 
@@ -22,20 +19,54 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final serverSettings = ServerSettings();
+    final themePrefs = ThemePreferences();
+
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: serverSettings),
+        ChangeNotifierProvider.value(value: themePrefs),
         ChangeNotifierProvider(
           create: (_) => AppState(serverSettings: serverSettings),
         ),
       ],
-      child: MaterialApp(
-        title: 'Messenger',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.theme,
-        home: const _Root(),
+      child: Consumer<ThemePreferences>(
+        builder: (_, themePrefs, __) {
+          SystemChrome.setSystemUIOverlayStyle(
+            AppTheme.overlayFor(
+              themePrefs.isLight ? Brightness.light : Brightness.dark,
+            ),
+          );
+
+          return MaterialApp(
+            title: 'Messenger',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            darkTheme: AppTheme.dark,
+            themeMode: themePrefs.mode,
+            home: const _Bootstrap(),
+          );
+        },
       ),
     );
+  }
+}
+
+class _Bootstrap extends StatelessWidget {
+  const _Bootstrap();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<ServerSettings>();
+    final c = context.mc;
+    if (!settings.isLoaded) {
+      return Scaffold(
+        backgroundColor: c.bg,
+        body: Center(
+          child: CircularProgressIndicator(color: c.accent),
+        ),
+      );
+    }
+    return const _Root();
   }
 }
 

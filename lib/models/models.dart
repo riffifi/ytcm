@@ -1,4 +1,12 @@
-// models/message.dart
+import '../utils/timestamp.dart';
+
+class ConversationPeer {
+  final String userId;
+  final String username;
+
+  const ConversationPeer({required this.userId, required this.username});
+}
+
 class Message {
   final String uuid;
   final String senderId;
@@ -22,18 +30,26 @@ class Message {
     required this.status,
   });
 
+  /// Text shown in list previews and bubbles when [text] is null/empty.
+  String get previewText {
+    final t = text?.trim();
+    if (t != null && t.isNotEmpty) return t;
+    if (fileId != null && fileId!.isNotEmpty) return 'Attachment';
+    return '';
+  }
+
   factory Message.fromJson(Map<String, dynamic> json) => Message(
-        uuid: json['uuid'],
-        senderId: json['sender_id'],
-        receiverId: json['receiver_id'],
-        dialogId: json['dialog_id'],
-        text: json['text'],
-        fileId: json['file_id'],
-        createdAt: DateTime.parse(json['created_at']),
+        uuid: json['uuid'] as String,
+        senderId: json['sender_id'] as String,
+        receiverId: json['receiver_id'] as String,
+        dialogId: json['dialog_id'] as String,
+        text: json['text'] as String?,
+        fileId: json['file_id'] as String?,
+        createdAt: parseServerTimestamp(json['created_at']),
         deliveredAt: json['delivered_at'] != null
-            ? DateTime.parse(json['delivered_at'])
+            ? parseServerTimestamp(json['delivered_at'])
             : null,
-        status: json['status'] ?? 0,
+        status: (json['status'] as num?)?.toInt() ?? 0,
       );
 
   Message copyWith({int? status}) => Message(
