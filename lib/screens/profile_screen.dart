@@ -47,7 +47,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           icon: const Icon(Icons.arrow_back_ios, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Profile'),
+        title: const Text('Профиль'),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: c.border),
@@ -78,11 +78,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Text(
+                  me?.displayName ?? me?.username ?? '',
+                  style: TextStyle(
+                    color: c.primary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
                 Text('@${me?.username ?? ''}',
                     style: TextStyle(
-                        color: c.primary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
+                        color: c.secondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
                 const SizedBox(height: 4),
                 Container(
                   padding:
@@ -99,18 +108,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 36),
-          _SectionLabel('Profile info'),
+          _SectionLabel('Информация профиля'),
           const SizedBox(height: 12),
           TextField(
             controller: _firstNameCtrl,
             style: TextStyle(color: c.primary, fontSize: 15),
-            decoration: const InputDecoration(hintText: 'First name'),
+            decoration: const InputDecoration(hintText: 'Имя'),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _lastNameCtrl,
             style: TextStyle(color: c.primary, fontSize: 15),
-            decoration: const InputDecoration(hintText: 'Last name'),
+            decoration: const InputDecoration(hintText: 'Фамилия'),
           ),
           const SizedBox(height: 20),
           _saving
@@ -139,18 +148,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     setState(() => _saving = false);
                     if (!mounted) return;
                     if (ok) {
-                      showMessengerSnackBar(context, 'Profile updated');
+                      showMessengerSnackBar(context, 'Профиль обновлён');
                     } else {
                       showMessengerSnackBar(
                         context,
-                        'Could not update profile',
+                        'Не удалось обновить профиль',
                       );
                     }
                   },
-                  child: const Text('Save changes'),
+                  child: const Text('Сохранить изменения'),
                 ),
           const SizedBox(height: 32),
-          _SectionLabel('Appearance'),
+          _SectionLabel('Внешний вид'),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -162,11 +171,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(
-                'Light theme',
+                'Светлая тема',
                 style: TextStyle(color: c.primary, fontSize: 15),
               ),
               subtitle: Text(
-                'White background',
+                'Светлый фон',
                 style: TextStyle(color: c.secondary, fontSize: 12),
               ),
               value: themePrefs.isLight,
@@ -176,11 +185,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 32),
-          _SectionLabel('Account'),
+          _SectionLabel('Аккаунт'),
           const SizedBox(height: 12),
           _ActionTile(
             icon: Icons.dns_outlined,
-            label: 'Server settings',
+            label: 'Настройки сервера',
             color: c.secondary,
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const ServerSettingsScreen())),
@@ -188,7 +197,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 8),
           _ActionTile(
             icon: Icons.logout,
-            label: 'Sign out',
+            label: 'Выйти',
             color: c.error,
             onTap: () async {
               await state.logout();

@@ -8,10 +8,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   web_socket_channel: ^2.4.0
   http: ^1.2.0
   shared_preferences: ^2.2.3
-  intl: ^0.19.0
+  intl: ^0.20.2
   provider: ^6.1.2
   flutter_local_notifications: ^18.0.1
   file_picker: ^8.1.4

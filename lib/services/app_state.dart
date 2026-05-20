@@ -31,6 +31,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
 
   final Map<String, List<Message>> _conversations = {};
   List<Connection> _contacts = [];
+  final Map<String, String> _peerLabels = {};
   String? _activeChatUserId;
   String? _activeChatUsername;
   String? _activeGroupId;
@@ -89,10 +90,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
           break;
         }
       }
-      final username = fromContact?.username ??
+      final displayName = _peerLabels[id] ??
           _conversationStore.nameFor(id) ??
+          fromContact?.username ??
           _shortPeerLabel(id);
-      return ConversationPeer(userId: id, username: username);
+      return ConversationPeer(userId: id, username: displayName);
     }).toList();
 
     peers.sort((a, b) {
@@ -529,6 +531,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         chat.requestHistory(c.uuid);
       }
     }
+    unawaited(_refreshContactProfiles());
     notifyListeners();
   }
 
@@ -543,15 +546,31 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _rememberPeer(String userId, String username) {
+    if (userId.isEmpty || username.isEmpty) return;
+    _peerLabels[userId] = username;
     _conversationStore.setName(userId, username);
     _conversationStore.save();
   }
 
   String _nameForPeer(String peerId) {
+    final label = _peerLabels[peerId];
+    if (label != null && label.isNotEmpty) return label;
     for (final c in _contacts) {
       if (c.uuid == peerId) return c.username;
     }
     return _conversationStore.nameFor(peerId) ?? _shortPeerLabel(peerId);
+  }
+
+  Future<void> _refreshContactProfiles() async {
+    final tok = _token;
+    if (tok == null) return;
+    for (final c in _contacts) {
+      final profile = await auth.getUserProfile(tok, c.username, uuid: c.uuid);
+      if (profile != null) {
+        _rememberPeer(c.uuid, profile.displayName);
+      }
+    }
+    notifyListeners();
   }
 
   String _shortPeerLabel(String id) {
@@ -607,7 +626,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     if (me == null) return null;
     final q = _normalizeQuery(query).toLowerCase();
     if (q.isEmpty) return null;
-    if (q == me.username.toLowerCase() || q == me.uuid.toLowerCase()) {
+    if (q == me.username.toLowerCase()) {
       return (peerId: me.uuid, username: me.username);
     }
     return null;
@@ -626,8 +645,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     for (final c in _contacts) {
       if (c.username.toLowerCase() == q) return c.uuid;
     }
-    final raw = _normalizeQuery(query);
-    if (_looksLikeUuid(raw)) return raw;
     return null;
   }
 
@@ -663,7 +680,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
 
     _lastPeerLookupError = lookup.failure?.message ??
-        'No user "$trimmed". Try username, email, or UUID.';
+      'No user "$trimmed". Try username.';
     return null;
   }
 
@@ -672,13 +689,6 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       localeController
         .t('conversations.lookup_hint')
         .replaceAll('{query}', query);
-
-  bool _looksLikeUuid(String value) {
-    final re = RegExp(
-        r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-        caseSensitive: false);
-    return re.hasMatch(value);
-  }
 
   void openChat(String userId, String username) {
     _activeChatUserId = userId;
@@ -916,6 +926,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
         dateOfBirth: info.dateOfBirth,
         additionalInfo: info.additionalInfo,
       );
+      _rememberPeer(_me!.uuid, _me!.displayName);
       notifyListeners();
     }
     return true;

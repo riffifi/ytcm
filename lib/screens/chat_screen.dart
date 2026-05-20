@@ -161,7 +161,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildAppBar(
+    PreferredSizeWidget _buildAppBar(
       BuildContext context, AppState state, String subtitle) {
     final c = context.mc;
     return AppBar(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'services/app_state.dart';
 import 'services/locale_controller.dart';
@@ -57,6 +58,11 @@ class App extends StatelessWidget {
             locale: locale.locale,
             supportedLocales:
                 locale.availableCodes.map((c) => Locale(c)).toList(),
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
             home: const _Bootstrap(),
           );
         },

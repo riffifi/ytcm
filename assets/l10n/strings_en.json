@@ -26,17 +26,17 @@
     "group_name": "Group name",
     "create": "Create",
     "members": "Members",
-    "add_member": "Add member by user ID",
+    "add_member": "Add member by username",
     "leave": "Leave group",
     "info": "Group info"
   },
   "conversations": {
     "title": "Messages",
     "new_chat": "New chat",
-    "username_hint": "Username, email, or UUID",
+    "username_hint": "Username",
     "start": "Start",
-    "empty_query": "Please enter a username or user ID",
-    "lookup_hint": "No user \"{query}\". Use their exact username (GET /getuserinfo) or UUID from Profile. They do not need to be online to receive messages."
+    "empty_query": "Please enter a username",
+    "lookup_hint": "No user \"{query}\". Use the exact username. They do not need to be online to receive messages."
   },
   "auth": {
     "sign_in": "Sign in",

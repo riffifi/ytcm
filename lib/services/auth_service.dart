@@ -95,13 +95,6 @@ class AuthService {
       return (result: null, failure: const PeerLookupFailure('Enter a username'));
     }
 
-    if (_looksLikeUuid(normalized)) {
-      return (
-        result: PeerLookupResult(username: normalized, uuid: normalized),
-        failure: null,
-      );
-    }
-
     PeerLookupFailure? lastFailure;
     for (final candidate in _usernameCandidates(normalized)) {
       final attempt = await _getUserInfoOnce(token: token, username: candidate);
@@ -114,7 +107,7 @@ class AuthService {
     return (
       result: null,
       failure: lastFailure ??
-          PeerLookupFailure('No user "$normalized" on auth server (getuserinfo 404).'),
+          PeerLookupFailure('No user "$normalized" on auth server.'),
     );
   }
 
@@ -122,14 +115,6 @@ class AuthService {
     var q = raw.trim();
     if (q.startsWith('@')) q = q.substring(1).trim();
     return q;
-  }
-
-  bool _looksLikeUuid(String value) {
-    final re = RegExp(
-      r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-      caseSensitive: false,
-    );
-    return re.hasMatch(value);
   }
 
   List<String> _usernameCandidates(String query) {
@@ -181,12 +166,14 @@ class AuthService {
       final resolvedUsername =
           (rawName != null && rawName.isNotEmpty) ? rawName : username;
 
-      // Prefer uuid when server includes it; otherwise use username as receiver_id
-      // (some deployments accept username on send_message / match on delivery).
-      final uuid = _readUuid(json) ?? resolvedUsername;
+      final resolvedUuid = _readUuid(json) ?? resolvedUsername;
+      final profile = UserInfo.fromProfileJson(json, resolvedUuid);
 
       return (
-        result: PeerLookupResult(username: resolvedUsername, uuid: uuid),
+        result: PeerLookupResult(
+          username: profile.displayName,
+          uuid: resolvedUuid,
+        ),
         failure: null,
       );
     } catch (e) {
@@ -207,6 +194,14 @@ class AuthService {
     return null;
   }
 
+  bool _looksLikeUuid(String value) {
+    final re = RegExp(
+      r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+      caseSensitive: false,
+    );
+    return re.hasMatch(value);
+  }
+
   Future<UserInfo?> getSessionInfo(String token) async {
     try {
       final res = await http
@@ -217,9 +212,39 @@ class AuthService {
           )
           .timeout(const Duration(seconds: 15));
       if (res.statusCode == 200) {
-        return UserInfo.fromSessionJson(jsonDecode(res.body));
+        final session = UserInfo.fromSessionJson(jsonDecode(res.body));
+        final profile = await getUserProfile(
+          token,
+          session.username,
+          uuid: session.uuid,
+        );
+        return profile ?? session;
       }
       return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<UserInfo?> getUserProfile(
+    String token,
+    String username, {
+    String? uuid,
+  }) async {
+    try {
+      final res = await http
+          .get(
+            Uri.parse('$baseUrl/getuserinfo').replace(queryParameters: {
+              'session_tocken': token,
+              'username': username,
+            }),
+          )
+          .timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return null;
+      return UserInfo.fromProfileJson(
+        jsonDecode(res.body) as Map<String, dynamic>,
+        uuid ?? username,
+      );
     } catch (_) {
       return null;
     }

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,19 +9,13 @@ class ServerSettings extends ChangeNotifier {
   static const _keyFile = 'server_file_ws_url';
 
   static String get defaultAuthUrl =>
-      (!kIsWeb && Platform.isAndroid)
-          ? 'http://10.0.2.2:3000'
-          : 'http://127.0.0.1:3000';
+      'https://auth.yechat.ru';
 
   static String get defaultChatUrl =>
-      (!kIsWeb && Platform.isAndroid)
-          ? 'ws://10.0.2.2:3001/ws'
-          : 'ws://127.0.0.1:3001/ws';
+      'wss://msg.yechat.ru/ws';
 
   static String get defaultFileWsUrl =>
-      (!kIsWeb && Platform.isAndroid)
-          ? 'ws://10.0.2.2:25463/ws'
-          : 'ws://127.0.0.1:25463/ws';
+      'wss://file.yechat.ru/ws';
 
   String _authUrl = defaultAuthUrl;
   String _chatUrl = defaultChatUrl;

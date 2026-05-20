@@ -3,8 +3,8 @@
   "locale": { "name": "Русский" },
   "presence": {
     "online": "В сети",
-    "last_seen": "Был(а) в сети в {time}",
-    "unknown": "Время последнего визита неизвестно"
+    "last_seen": "Был(а) в сети {time}",
+    "unknown": "Недавно был(а) в сети"
   },
   "notifications": {
     "dm_title": "Новое сообщение",
@@ -13,7 +13,7 @@
   "tabs": { "messages": "Сообщения", "groups": "Группы" },
   "chat": {
     "hint_message": "Сообщение",
-    "say_hi": "Поздоровайтесь с {name}",
+    "say_hi": "Напишите {name}",
     "attachment": "Вложение",
     "no_messages": "Пока нет сообщений",
     "send_file": "Отправить файл",
@@ -26,17 +26,17 @@
     "group_name": "Название группы",
     "create": "Создать",
     "members": "Участники",
-    "add_member": "Добавить по UUID",
+    "add_member": "Добавить по имени пользователя",
     "leave": "Покинуть группу",
     "info": "О группе"
   },
   "conversations": {
     "title": "Сообщения",
     "new_chat": "Новый чат",
-    "username_hint": "Имя, email или UUID",
+    "username_hint": "Имя пользователя",
     "start": "Начать",
-    "empty_query": "Введите имя пользователя или UUID",
-    "lookup_hint": "Пользователь \"{query}\" не найден. Используйте точное имя пользователя (GET /getuserinfo) или UUID из профиля. Онлайн-статус не обязателен для получения сообщений."
+    "empty_query": "Введите имя пользователя",
+    "lookup_hint": "Пользователь \"{query}\" не найден. Используйте точное имя пользователя. Для получения сообщений не нужно быть онлайн."
   },
   "auth": {
     "sign_in": "Вход",
@@ -46,19 +46,19 @@
     "phone": "Телефон",
     "username": "Имя пользователя",
     "sign_in_failed": "Не удалось войти. Проверьте данные и URL сервера в настройках.",
-    "session_error": "Ошибка сессии — auth-сервер может быть недоступен.",
-    "register_failed": "Регистрация не удалась — проверьте URL сервера в настройках."
+    "session_error": "Ошибка сессии — сервер авторизации может быть недоступен.",
+    "register_failed": "Не удалось зарегистрироваться — проверьте URL сервера в настройках."
   },
   "profile": { "title": "Профиль", "logout": "Выйти" },
   "settings": {
-    "title": "Сервер",
-    "auth_url": "URL auth",
-    "chat_url": "WebSocket чата",
-    "file_url": "WebSocket файлов",
+    "title": "Настройки сервера",
+    "auth_url": "URL сервера авторизации",
+    "chat_url": "URL WebSocket чата",
+    "file_url": "URL WebSocket файлов",
     "language": "Язык",
-    "auth_test": "Проверить auth",
+    "auth_test": "Проверить авторизацию",
     "chat_test": "Проверить чат",
-    "auth_url_error": "URL auth должен начинаться с http:// или https://",
+    "auth_url_error": "URL сервера авторизации должен начинаться с http:// или https://",
     "chat_url_error": "URL чата должен начинаться с ws:// или wss://",
     "file_url_error": "URL файлов должен начинаться с ws:// или wss://",
     "save": "Сохранить",

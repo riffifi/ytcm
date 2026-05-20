@@ -322,7 +322,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'On Android emulator use 10.0.2.2 instead of 127.0.0.1.',
+              'On Android emulator use 10.0.2.2 instead of localhost.',
               style: TextStyle(
                 color: c.accent.withValues(alpha: 0.85),
                 fontSize: 12,
