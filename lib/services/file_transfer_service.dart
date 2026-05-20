@@ -161,15 +161,25 @@ class FileTransferService {
           await channel.sink.close();
           throw Exception(map['message'] ?? 'download denied');
         }
-        // If server inlines file data as base64 string, decode and return.
-        final maybeData = map['data'];
-        if (maybeData is String && maybeData.isNotEmpty) {
-          try {
-            final decoded = base64Decode(maybeData);
+        // Search known payload locations for inline base64 data.
+        final payload = map['data'] ?? map['file'] ?? map['bytes'] ?? map['content'];
+        if (payload is String && payload.isNotEmpty) {
+          final decoded = _tryDecodeBase64(payload);
+          if (decoded != null) {
             await channel.sink.close();
             return decoded;
-          } catch (_) {
-            // not base64 — continue to treat as metadata
+          }
+        }
+        if (payload is Map<String, dynamic>) {
+          for (final key in const ['data', 'bytes', 'content', 'base64']) {
+            final nested = payload[key];
+            if (nested is String && nested.isNotEmpty) {
+              final decoded = _tryDecodeBase64(nested);
+              if (decoded != null) {
+                await channel.sink.close();
+                return decoded;
+              }
+            }
           }
         }
         totalChunks = (map['total_chunks'] as num?)?.toInt() ?? 1;
@@ -198,3 +208,16 @@ class FileTransferService {
     return out;
   }
 }
+  Uint8List? _tryDecodeBase64(String value) {
+    try {
+      final normalized = value.trim();
+      if (normalized.isEmpty) return null;
+      final comma = normalized.indexOf(',');
+      final candidate = (normalized.startsWith('data:') && comma != -1)
+          ? normalized.substring(comma + 1)
+          : normalized;
+      return Uint8List.fromList(base64Decode(candidate));
+    } catch (_) {
+      return null;
+    }
+  }

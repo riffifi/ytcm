@@ -71,14 +71,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(color: c.accent.withOpacity(0.3)),
                       ),
-                      child: Center(
-                        child: Text(
-                          me?.initials ?? '?',
-                          style: TextStyle(
-                              color: c.accent,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w600),
-                        ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Builder(
+                        builder: (_) {
+                          final avatar = state.localProfileAvatarBytes;
+                          if (avatar != null && avatar.isNotEmpty) {
+                            return Image.memory(avatar, fit: BoxFit.cover);
+                          }
+                          return Center(
+                            child: Text(
+                              me?.initials ?? '?',
+                              style: TextStyle(
+                                  color: c.accent,
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     GestureDetector(

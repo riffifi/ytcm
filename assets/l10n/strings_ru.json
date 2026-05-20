@@ -28,7 +28,13 @@
     "members": "Участники",
     "add_member": "Добавить по имени пользователя",
     "leave": "Покинуть группу",
-    "info": "О группе"
+    "info": "О группе",
+    "no_details": "Информация о группе недоступна",
+    "edit_description": "Изменить описание",
+    "updated": "Группа обновлена",
+    "update_failed": "Не удалось обновить группу",
+    "avatar_updated": "Аватар группы обновлён",
+    "role_updated": "Роль обновлена"
   },
   "conversations": {
     "title": "Сообщения",
@@ -65,5 +71,6 @@
     "saved": "Сохранено",
     "reset": "Сброс"
   },
-  "common": { "cancel": "Отмена", "error": "Ошибка", "ok": "OK", "today": "Сегодня", "yesterday": "Вчера" }
+  "common": { "cancel": "Отмена", "close": "Закрыть", "error": "Ошибка", "ok": "OK", "today": "Сегодня", "yesterday": "Вчера" },
+  "status": { "waiting_for_chat_connection": "Ожидание подключения к чату…" }
 }

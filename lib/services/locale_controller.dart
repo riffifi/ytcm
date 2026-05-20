@@ -133,6 +133,25 @@ class LocaleController extends ChangeNotifier {
   }
 
   String t(String key) => _flat[key] ?? key;
+  
+  // More robust lookup: try to find a best-effort match when exact key is missing.
+  String tBest(String key) {
+    final exact = _flat[key];
+    if (exact != null) return exact;
+    // Try matching by last segment (e.g., 'chat.hint_message' -> 'hint_message')
+    final parts = key.split('.');
+    if (parts.isNotEmpty) {
+      final last = parts.last;
+      for (final e in _flat.entries) {
+        if (e.key.endsWith('.$last') || e.key == last) return e.value;
+      }
+    }
+    // As a fallback, return the key itself (so caller sees missing marker)
+    // but also log for diagnostics.
+    // ignore: avoid_print
+    print('i18n: missing key "$key" for locale $_code');
+    return key;
+  }
 }
 
 extension L10nBuildContext on BuildContext {

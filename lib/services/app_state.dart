@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:io';
@@ -43,6 +44,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   final Map<String, UserPresence?> _presence = {};
   final Map<String, double> _uploadProgress = {};
   final Map<String, Uint8List?> _peerAvatarCache = {};
+  Uint8List? _localProfileAvatarBytes;
   final List<GroupInfo> _groups = [];
   final Map<String, List<GroupMessage>> _groupMessages = {};
   GroupDetails? _lastGroupDetails;
@@ -79,6 +81,7 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   bool get isLoggedIn => _token != null && _me != null;
   List<GroupInfo> get groups => List.unmodifiable(_groups);
   GroupDetails? get lastGroupDetails => _lastGroupDetails;
+  Uint8List? get localProfileAvatarBytes => _localProfileAvatarBytes;
 
   List<ConversationPeer> get conversationPeers {
     final ids = <String>{
@@ -229,6 +232,14 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     await _conversationStore.load();
 
     final prefs = await SharedPreferences.getInstance();
+    final rawAvatar = prefs.getString('profile_avatar_bytes');
+    if (rawAvatar != null && rawAvatar.isNotEmpty) {
+      try {
+        _localProfileAvatarBytes = base64Decode(rawAvatar);
+      } catch (_) {
+        _localProfileAvatarBytes = null;
+      }
+    }
     final saved = prefs.getString('session_token');
     if (saved != null) {
       await _restoreSession(saved);
@@ -1071,26 +1082,11 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     String filename = 'avatar.jpg',
     String mimeType = 'image/jpeg',
   }) async {
-    final tok = _token;
-    if (tok == null) return false;
     try {
-      final fileId = await _files().uploadBytes(
-        sessionToken: tok,
-        bytes: bytes,
-        filename: filename,
-        mimeType: mimeType,
-      );
-      // try to notify server via chat websocket (server may support update_profile)
-      try {
-        chat.updateProfileAvatar(avatarId: fileId);
-      } catch (_) {}
-
-      // If auth server supports HTTP profile update, try to refresh session info
-      final info = await auth.getSessionInfo(tok);
-      if (info != null) {
-        _me = info;
-        notifyListeners();
-      }
+      _localProfileAvatarBytes = bytes;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('profile_avatar_bytes', base64Encode(bytes));
+      notifyListeners();
       return true;
     } catch (e) {
       return false;

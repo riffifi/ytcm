@@ -326,6 +326,16 @@ class ChatService {
     });
   }
 
+  void setGroupMemberRole(String groupId, String userId, String role) {
+    _send({
+      'action': 'set_group_member_role',
+      'session_token': _token,
+      'group_id': groupId,
+      'user_id': userId,
+      'role': role,
+    });
+  }
+
   /// Update group metadata (name/description/avatar_id).
   void updateGroup({
     required String groupId,

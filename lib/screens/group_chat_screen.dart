@@ -256,7 +256,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                             ? PopupMenuButton<String>(
                                 onSelected: (r) async {
                                   // request role change via chat service
-                                  state.chat.addGroupMember(gid, m.userId, role: r);
+                                  state.chat.setGroupMemberRole(gid, m.userId, r);
                                   // refresh info
                                   state.requestGroupInfo(gid);
                                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.str('groups.role_updated'))));

@@ -28,7 +28,13 @@
     "members": "Members",
     "add_member": "Add member by username",
     "leave": "Leave group",
-    "info": "Group info"
+    "info": "Group info",
+    "no_details": "Group details are unavailable",
+    "edit_description": "Edit description",
+    "updated": "Group updated",
+    "update_failed": "Could not update group",
+    "avatar_updated": "Group avatar updated",
+    "role_updated": "Role updated"
   },
   "conversations": {
     "title": "Messages",
@@ -65,5 +71,6 @@
     "saved": "Saved",
     "reset": "Reset defaults"
   },
-  "common": { "cancel": "Cancel", "error": "Error", "ok": "OK", "today": "Today", "yesterday": "Yesterday" }
+  "common": { "cancel": "Cancel", "close": "Close", "error": "Error", "ok": "OK", "today": "Today", "yesterday": "Yesterday" },
+  "status": { "waiting_for_chat_connection": "Waiting for chat connection…" }
 }

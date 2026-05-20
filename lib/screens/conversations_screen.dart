@@ -41,7 +41,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
             child: Container(
               margin: const EdgeInsets.only(right: 16),
               child: FutureBuilder<Uint8List?>(
-                future: state.me?.avatarId != null ? state.downloadFileBytes(state.me!.avatarId!) : Future.value(null),
+                future: state.localProfileAvatarBytes != null
+                    ? Future.value(state.localProfileAvatarBytes)
+                    : (state.me?.avatarId != null
+                        ? state.downloadFileBytes(state.me!.avatarId!)
+                        : Future.value(null)),
                 builder: (ctx, snap) {
                   if (snap.hasData && snap.data != null && snap.data!.isNotEmpty) {
                     return CircleAvatar(
