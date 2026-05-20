@@ -1,14 +1,39 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../services/app_state.dart';
+import 'package:provider/provider.dart';
+
+import '../models/group_models.dart';
 import '../models/models.dart';
+import '../services/app_state.dart';
+import '../services/locale_controller.dart';
 import '../theme.dart';
 import 'chat_screen.dart';
+import 'group_chat_screen.dart';
 import 'profile_screen.dart';
 
-class ConversationsScreen extends StatelessWidget {
+class ConversationsScreen extends StatefulWidget {
   const ConversationsScreen({super.key});
+
+  @override
+  State<ConversationsScreen> createState() => _ConversationsScreenState();
+}
+
+class _ConversationsScreenState extends State<ConversationsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tab;
+
+  @override
+  void initState() {
+    super.initState();
+    _tab = TabController(length: 2, vsync: this);
+    _tab.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _tab.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,7 +46,16 @@ class ConversationsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
-        title: const Text('Messages'),
+        title: TabBar(
+          controller: _tab,
+          indicatorColor: c.accent,
+          labelColor: c.primary,
+          unselectedLabelColor: c.secondary,
+          tabs: [
+            Tab(text: context.str('tabs.messages')),
+            Tab(text: context.str('tabs.groups')),
+          ],
+        ),
         actions: [
           GestureDetector(
             onTap: () => Navigator.push(
@@ -64,19 +98,74 @@ class ConversationsScreen extends StatelessWidget {
           ),
         ),
       ),
-      body: peers.isEmpty
-          ? _emptyState(context)
-          : ListView.builder(
-              padding: EdgeInsets.zero,
-              itemCount: peers.length,
-              itemBuilder: (context, i) =>
-                  _ConversationTile(peer: peers[i]),
-            ),
+      body: TabBarView(
+        controller: _tab,
+        children: [
+          peers.isEmpty
+              ? _emptyMessages(context)
+              : ListView.builder(
+                  padding: EdgeInsets.zero,
+                  itemCount: peers.length,
+                  itemBuilder: (context, i) =>
+                      _ConversationTile(peer: peers[i]),
+                ),
+          _GroupsBody(onOpenGroup: (g) {
+            state.openGroupChat(g.uuid, g.name);
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const GroupChatScreen()),
+            );
+          }),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showNewChatModal(context),
+        onPressed: () {
+          if (_tab.index == 0) {
+            _showNewChatModal(context);
+          } else {
+            _showNewGroupDialog(context);
+          }
+        },
         backgroundColor: c.accent,
-        child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-        tooltip: 'New chat',
+        child: Icon(
+          _tab.index == 0 ? Icons.chat_bubble_outline : Icons.group_add,
+          color: Colors.white,
+        ),
+        tooltip: _tab.index == 0
+            ? context.str('conversations.new_chat')
+            : context.str('groups.new_group'),
+      ),
+    );
+  }
+
+  void _showNewGroupDialog(BuildContext context) {
+    final c = context.mc;
+    final state = context.read<AppState>();
+    final ctrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: c.surfaceHigh,
+        title: Text(context.str('groups.new_group')),
+        content: TextField(
+          controller: ctrl,
+          decoration: InputDecoration(
+            labelText: context.str('groups.group_name'),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(context.str('common.cancel')),
+          ),
+          TextButton(
+            onPressed: () {
+              state.createGroupByName(ctrl.text);
+              Navigator.pop(ctx);
+            },
+            child: Text(context.str('groups.create')),
+          ),
+        ],
       ),
     );
   }
@@ -122,7 +211,7 @@ class ConversationsScreen extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Start new chat',
+                      context.str('conversations.new_chat'),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -134,7 +223,7 @@ class ConversationsScreen extends StatelessWidget {
                       controller: controller,
                       autofocus: true,
                       decoration: InputDecoration(
-                        hintText: 'Username, email, or user ID',
+                        hintText: context.str('conversations.username_hint'),
                         errorText: error,
                         filled: true,
                         fillColor: sheetColors.bg,
@@ -165,7 +254,7 @@ class ConversationsScreen extends StatelessWidget {
                         Expanded(
                           child: OutlinedButton(
                             onPressed: () => Navigator.pop(ctx),
-                            child: const Text('Cancel'),
+                            child: Text(context.str('common.cancel')),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -197,9 +286,9 @@ class ConversationsScreen extends StatelessWidget {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Text(
-                                    'Start',
-                                    style: TextStyle(color: Colors.white),
+                                : Text(
+                                    context.str('conversations.start'),
+                                    style: const TextStyle(color: Colors.white),
                                   ),
                           ),
                         ),
@@ -224,7 +313,7 @@ class ConversationsScreen extends StatelessWidget {
     required void Function(String message) onError,
   }) async {
     if (query.isEmpty) {
-      onError('Please enter a username or user ID');
+      onError(navContext.str('conversations.empty_query'));
       return;
     }
 
@@ -245,7 +334,7 @@ class ConversationsScreen extends StatelessWidget {
     );
   }
 
-  Widget _emptyState(BuildContext context) {
+  Widget _emptyMessages(BuildContext context) {
     final c = context.mc;
     return Center(
       child: Padding(
@@ -265,18 +354,12 @@ class ConversationsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'No conversations yet',
+              context.str('chat.no_messages'),
               style: TextStyle(
                 color: c.primary,
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Tap + and enter a username or email. They do not need to be online — messages are stored until they connect.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: c.secondary, fontSize: 13),
             ),
           ],
         ),
@@ -285,20 +368,109 @@ class ConversationsScreen extends StatelessWidget {
   }
 }
 
-class _ConversationTile extends StatelessWidget {
-  final ConversationPeer peer;
-  const _ConversationTile({required this.peer});
+class _GroupsBody extends StatelessWidget {
+  const _GroupsBody({required this.onOpenGroup});
+
+  final void Function(GroupInfo g) onOpenGroup;
 
   @override
   Widget build(BuildContext context) {
     final c = context.mc;
     final state = context.watch<AppState>();
+    final groups = state.groups;
+    final me = state.me?.uuid ?? '';
+
+    if (groups.isEmpty) {
+      return Center(
+        child: Text(
+          context.str('groups.title'),
+          style: TextStyle(color: c.secondary),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: EdgeInsets.zero,
+      itemCount: groups.length,
+      itemBuilder: (context, i) {
+        final g = groups[i];
+        final unread = state.getGroupUnreadCount(g.uuid, me);
+        final last = state.getLastGroupMessage(g.uuid);
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: c.accentSoft,
+            child: Text(
+              g.name.isNotEmpty ? g.name[0].toUpperCase() : '?',
+              style: TextStyle(color: c.accent),
+            ),
+          ),
+          title: Text(g.name, style: TextStyle(color: c.primary)),
+          subtitle: Text(
+            last == null
+                ? context.str('chat.no_messages')
+                : (last.fileId != null
+                    ? context.str('chat.attachment')
+                    : last.previewText),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: c.secondary, fontSize: 13),
+          ),
+          trailing: unread > 0
+              ? Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: c.accent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$unread',
+                    style: const TextStyle(color: Colors.white, fontSize: 11),
+                  ),
+                )
+              : null,
+          onTap: () => onOpenGroup(g),
+        );
+      },
+    );
+  }
+}
+
+class _ConversationTile extends StatefulWidget {
+  final ConversationPeer peer;
+  const _ConversationTile({required this.peer});
+
+  @override
+  State<_ConversationTile> createState() => _ConversationTileState();
+}
+
+class _ConversationTileState extends State<_ConversationTile> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppState>().refreshPresence(widget.peer.userId);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.mc;
+    final state = context.watch<AppState>();
+    final peer = widget.peer;
     final lastMsg = state.getLastMessage(peer.userId);
-    final preview = state.lastMessagePreview(peer.userId);
+    var preview = state.lastMessagePreview(peer.userId);
+    if (preview == 'Attachment') preview = context.str('chat.attachment');
     final unread = state.getUnreadCount(peer.userId);
-    final label = peer.username.isNotEmpty
-        ? peer.username[0].toUpperCase()
-        : '?';
+    final label =
+        peer.username.isNotEmpty ? peer.username[0].toUpperCase() : '?';
+
+    final sub = state.presenceSubtitle(
+      peer.userId,
+      onlineLabel: context.str('presence.online'),
+      lastSeenTemplate: context.str('presence.last_seen'),
+      unknownLabel: context.str('presence.unknown'),
+    );
 
     return Material(
       color: Colors.transparent,
@@ -336,15 +508,20 @@ class _ConversationTile extends StatelessWidget {
                         ),
                         if (lastMsg != null)
                           Text(
-                            _formatTime(lastMsg.createdAt),
+                            _formatTime(context, lastMsg.createdAt),
                             style: TextStyle(
-                              color: unread > 0
-                                  ? c.accent
-                                  : c.tertiary,
+                              color: unread > 0 ? c.accent : c.tertiary,
                               fontSize: 11,
                             ),
                           ),
                       ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      sub,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: c.tertiary, fontSize: 11),
                     ),
                     const SizedBox(height: 3),
                     Row(
@@ -355,9 +532,7 @@ class _ConversationTile extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: unread > 0
-                                  ? c.primary
-                                  : c.secondary,
+                              color: unread > 0 ? c.primary : c.secondary,
                               fontSize: 13,
                             ),
                           ),
@@ -389,8 +564,7 @@ class _ConversationTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right,
-                  color: c.border, size: 16),
+              Icon(Icons.chevron_right, color: c.border, size: 16),
             ],
           ),
         ),
@@ -398,11 +572,12 @@ class _ConversationTile extends StatelessWidget {
     );
   }
 
-  String _formatTime(DateTime dt) {
+  String _formatTime(BuildContext context, DateTime dt) {
+    final c = context.mc;
     final now = DateTime.now();
     final diff = now.difference(dt);
     if (diff.inDays == 0) return DateFormat('HH:mm').format(dt);
-    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays == 1) return context.str('common.yesterday');
     if (diff.inDays < 7) return DateFormat('EEE').format(dt);
     return DateFormat('dd/MM').format(dt);
   }
@@ -414,7 +589,7 @@ class _Avatar extends StatelessWidget {
   final Color? color;
   final Color? textColor;
 
-  _Avatar({
+  const _Avatar({
     required this.label,
     this.size = 44,
     this.color,

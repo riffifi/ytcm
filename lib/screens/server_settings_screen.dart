@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../services/app_state.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/locale_controller.dart';
 import '../services/server_settings.dart';
-import '../services/app_state.dart';
 import '../theme.dart';
 import '../utils/messenger_snackbar.dart';
 
@@ -17,6 +19,7 @@ class ServerSettingsScreen extends StatefulWidget {
 class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
   late TextEditingController _authCtrl;
   late TextEditingController _chatCtrl;
+  late TextEditingController _fileCtrl;
   bool _saving = false;
   String? _authPingResult;
   String? _chatPingResult;
@@ -29,36 +32,43 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     final s = context.read<ServerSettings>();
     _authCtrl = TextEditingController(text: s.authUrl);
     _chatCtrl = TextEditingController(text: s.chatUrl);
+    _fileCtrl = TextEditingController(text: s.fileWsUrl);
   }
 
   @override
   void dispose() {
     _authCtrl.dispose();
     _chatCtrl.dispose();
+    _fileCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final authUrl = _authCtrl.text.trim();
     final chatUrl = _chatCtrl.text.trim();
+    final fileUrl = _fileCtrl.text.trim();
 
     if (!_isValidUrl(authUrl, requireHttp: true)) {
-      _showError('Auth URL must start with http:// or https://');
+      _showError(context.str('settings.auth_url_error'));
       return;
     }
     if (!_isValidUrl(chatUrl, requireWs: true)) {
-      _showError('Chat URL must start with ws:// or wss://');
+      _showError(context.str('settings.chat_url_error'));
+      return;
+    }
+    if (!_isValidUrl(fileUrl, requireWs: true)) {
+      _showError(context.str('settings.file_url_error'));
       return;
     }
 
     setState(() => _saving = true);
-    await context.read<ServerSettings>().save(authUrl, chatUrl);
+    await context.read<ServerSettings>().save(authUrl, chatUrl, fileUrl);
     if (mounted) {
       await context.read<AppState>().reconnectWithNewSettings();
     }
     setState(() => _saving = false);
     if (mounted) {
-      showMessengerSnackBar(context, 'Settings saved');
+      showMessengerSnackBar(context, context.str('settings.saved'));
       Navigator.pop(context);
     }
   }
@@ -69,6 +79,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     setState(() {
       _authCtrl.text = ServerSettings.defaultAuthUrl;
       _chatCtrl.text = ServerSettings.defaultChatUrl;
+      _fileCtrl.text = ServerSettings.defaultFileWsUrl;
       _authPingResult = null;
       _chatPingResult = null;
     });
@@ -135,6 +146,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.mc;
+    final locale = context.watch<LocaleController>();
     final bottomInset = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
@@ -144,7 +156,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           icon: const Icon(Icons.arrow_back_ios, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Server settings'),
+        title: Text(context.str('settings.title')),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: c.border),
@@ -155,14 +167,43 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
         children: [
           _infoBox(context),
           const SizedBox(height: 20),
-          _label(context, 'Auth service'),
+          Text(
+            context.str('settings.language').toUpperCase(),
+            style: TextStyle(
+              color: c.secondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.8,
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            value: locale.availableCodes.contains(locale.localeCode)
+                ? locale.localeCode
+                : locale.availableLocales.first.code,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: c.surfaceHigh,
+            ),
+            items: locale.availableLocales
+                .map((item) => DropdownMenuItem(
+                      value: item.code,
+                      child: Text(item.label, style: TextStyle(color: c.primary)),
+                    ))
+                .toList(),
+            onChanged: (v) {
+              if (v != null) locale.setLocale(v);
+            },
+          ),
+          const SizedBox(height: 20),
+          _label(context, context.str('settings.auth_url')),
           const SizedBox(height: 8),
           TextField(
             controller: _authCtrl,
             decoration: InputDecoration(
-              hintText: 'http://127.0.0.1:3000',
-              prefixIcon: Icon(Icons.lock_outline,
-                  color: c.secondary, size: 16),
+              hintText: ServerSettings.defaultAuthUrl,
+              prefixIcon:
+                  Icon(Icons.lock_outline, color: c.secondary, size: 16),
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
@@ -170,23 +211,20 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           const SizedBox(height: 8),
           _pingRow(
             context: context,
-            label: 'Test auth',
+            label: context.str('settings.auth_test'),
             loading: _pingingAuth,
             result: _authPingResult,
             onPressed: _pingAuth,
           ),
-          const SizedBox(height: 6),
-          Text('HTTP — login, register, profile',
-              style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 20),
-          _label(context, 'Chat service'),
+          _label(context, context.str('settings.chat_url')),
           const SizedBox(height: 8),
           TextField(
             controller: _chatCtrl,
             decoration: InputDecoration(
-              hintText: 'ws://127.0.0.1:3001/ws',
-              prefixIcon: Icon(Icons.swap_horiz,
-                  color: c.secondary, size: 16),
+              hintText: ServerSettings.defaultChatUrl,
+              prefixIcon:
+                  Icon(Icons.swap_horiz, color: c.secondary, size: 16),
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
@@ -194,25 +232,34 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           const SizedBox(height: 8),
           _pingRow(
             context: context,
-            label: 'Test chat',
+            label: context.str('settings.chat_test'),
             loading: _pingingChat,
             result: _chatPingResult,
             onPressed: _pingChat,
           ),
-          const SizedBox(height: 6),
-          Text('WebSocket — real-time messaging',
-              style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 20),
+          _label(context, context.str('settings.file_url')),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _fileCtrl,
+            decoration: InputDecoration(
+              hintText: ServerSettings.defaultFileWsUrl,
+              prefixIcon: Icon(Icons.folder_open, color: c.secondary, size: 16),
+            ),
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+          ),
           const SizedBox(height: 28),
           _saving
               ? _loadingButton(context)
               : ElevatedButton(
                   onPressed: _save,
-                  child: const Text('Save & apply'),
+                  child: Text(context.str('settings.save')),
                 ),
           const SizedBox(height: 12),
           TextButton(
             onPressed: _reset,
-            child: const Text('Reset to defaults'),
+            child: Text(context.str('settings.reset')),
           ),
         ],
       ),
@@ -246,7 +293,8 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           Text(
             result,
             style: TextStyle(
-              color: result.startsWith('Failed') || result.contains('Not connected')
+              color: result.startsWith('Failed') ||
+                      result.contains('Not connected')
                   ? c.error
                   : c.accent,
               fontSize: 12,
@@ -274,8 +322,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'On Android emulator use 10.0.2.2 instead of 127.0.0.1. '
-              'On a physical device use your computer\'s LAN IP.',
+              'On Android emulator use 10.0.2.2 instead of 127.0.0.1.',
               style: TextStyle(
                 color: c.accent.withValues(alpha: 0.85),
                 fontSize: 12,
@@ -304,20 +351,20 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
   Widget _loadingButton(BuildContext context) {
     final c = context.mc;
     return Container(
-        height: 50,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: c.accent.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
+      height: 50,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: c.accent.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child:
+              CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
         ),
-        child: const Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child:
-                CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-          ),
-        ),
-      );
+      ),
+    );
   }
 }

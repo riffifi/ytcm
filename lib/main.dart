@@ -2,19 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/app_state.dart';
+import 'services/locale_controller.dart';
+import 'services/messenger_notifications.dart';
 import 'services/server_settings.dart';
 import 'services/theme_preferences.dart';
 import 'screens/auth_screen.dart';
 import 'screens/conversations_screen.dart';
 import 'theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const App());
+  await MessengerNotifications.init();
+  final localeController = LocaleController();
+  await localeController.init();
+  runApp(App(localeController: localeController));
 }
 
 class App extends StatelessWidget {
-  const App({super.key});
+  const App({super.key, required this.localeController});
+
+  final LocaleController localeController;
 
   @override
   Widget build(BuildContext context) {
@@ -25,12 +32,16 @@ class App extends StatelessWidget {
       providers: [
         ChangeNotifierProvider.value(value: serverSettings),
         ChangeNotifierProvider.value(value: themePrefs),
+        ChangeNotifierProvider.value(value: localeController),
         ChangeNotifierProvider(
-          create: (_) => AppState(serverSettings: serverSettings),
+          create: (_) => AppState(
+            serverSettings: serverSettings,
+            localeController: localeController,
+          ),
         ),
       ],
-      child: Consumer<ThemePreferences>(
-        builder: (_, themePrefs, __) {
+      child: Consumer2<ThemePreferences, LocaleController>(
+        builder: (_, themePrefs, locale, __) {
           SystemChrome.setSystemUIOverlayStyle(
             AppTheme.overlayFor(
               themePrefs.isLight ? Brightness.light : Brightness.dark,
@@ -38,11 +49,14 @@ class App extends StatelessWidget {
           );
 
           return MaterialApp(
-            title: 'Messenger',
+            title: locale.t('app.title'),
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light,
             darkTheme: AppTheme.dark,
             themeMode: themePrefs.mode,
+            locale: locale.locale,
+            supportedLocales:
+                locale.availableCodes.map((c) => Locale(c)).toList(),
             home: const _Bootstrap(),
           );
         },

@@ -14,6 +14,25 @@ class PeerLookupFailure {
   const PeerLookupFailure(this.message);
 }
 
+class UserPresence {
+  final bool isOnline;
+  final DateTime? lastOnline;
+
+  UserPresence({required this.isOnline, this.lastOnline});
+
+  factory UserPresence.fromJson(Map<String, dynamic> json) {
+    DateTime? lo;
+    final raw = json['last_online'];
+    if (raw is String && raw.trim().isNotEmpty) {
+      lo = DateTime.tryParse(raw.trim());
+    }
+    return UserPresence(
+      isOnline: json['is_online'] as bool? ?? false,
+      lastOnline: lo,
+    );
+  }
+}
+
 class AuthService {
   final String baseUrl;
 
@@ -234,6 +253,24 @@ class AuthService {
           ))
           .timeout(const Duration(seconds: 10));
     } catch (_) {}
+  }
+
+  Future<UserPresence?> getUserPresence(String token, String userId) async {
+    try {
+      final uri =
+          Uri.parse('$baseUrl/userpresence').replace(queryParameters: {
+        'session_tocken': token,
+        'user_id': userId,
+      });
+      final res = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (res.statusCode == 200) {
+        return UserPresence.fromJson(
+            jsonDecode(res.body) as Map<String, dynamic>);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<bool> changeUsername(String token, String newUsername) async {

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/models.dart';
+import '../models/group_models.dart';
 
 class ChatService {
   final String wsUrl;
@@ -20,6 +21,16 @@ class ChatService {
   final _connectionStateController = StreamController<bool>.broadcast();
   final _pongController = StreamController<void>.broadcast();
 
+  final _groupListController = StreamController<GroupListEvent>.broadcast();
+  final _groupMessageController = StreamController<GroupMessage>.broadcast();
+  final _groupHistoryController =
+      StreamController<Map<String, List<GroupMessage>>>.broadcast();
+  final _groupDetailsController = StreamController<GroupDetails>.broadcast();
+  final _groupReadReceiptController =
+      StreamController<Map<String, String>>.broadcast();
+  final _messageDeletedController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
   Stream<Message> get messages => _messageController.stream;
   Stream<Map<String, List<Message>>> get historyEvents =>
       _historyController.stream;
@@ -29,6 +40,18 @@ class ChatService {
   Stream<String> get errors => _errorController.stream;
   Stream<bool> get connectionState => _connectionStateController.stream;
   Stream<void> get pongs => _pongController.stream;
+
+  Stream<GroupListEvent> get groupListEvents => _groupListController.stream;
+  Stream<GroupMessage> get groupMessages => _groupMessageController.stream;
+  Stream<Map<String, List<GroupMessage>>> get groupHistoryEvents =>
+      _groupHistoryController.stream;
+  Stream<GroupDetails> get groupDetailsEvents =>
+      _groupDetailsController.stream;
+  /// `{ 'group_id': id, 'by_user_id': uid }`
+  Stream<Map<String, String>> get groupReadReceipts =>
+      _groupReadReceiptController.stream;
+  Stream<Map<String, dynamic>> get messageDeletedEvents =>
+      _messageDeletedController.stream;
 
   bool get isConnected => _channel != null && _joined;
 
@@ -59,7 +82,6 @@ class ChatService {
     }
   }
 
-  /// Opens the socket briefly to verify reachability (no join).
   Future<String> pingReachability() async {
     WebSocketChannel? probe;
     try {
@@ -129,11 +151,62 @@ class ChatService {
         case 'read_receipt':
           _readReceiptController.add(json['by_user_id'] as String);
           break;
+        case 'message_deleted':
+          _messageDeletedController.add({
+            'message_uuid': json['message_uuid'],
+            'by_user_id': json['by_user_id'],
+            'for_everyone': json['for_everyone'] ?? false,
+          });
+          break;
+        case 'mark_read_result':
         case 'pong':
-          _pongController.add(null);
+          if (type == 'pong') _pongController.add(null);
           break;
         case 'error':
           _errorController.add(json['message'] as String? ?? 'Unknown error');
+          break;
+
+        case 'groups':
+          final list = (json['groups'] as List)
+              .map((g) => GroupInfo.fromJson(g as Map<String, dynamic>))
+              .toList();
+          _groupListController.add(GroupListEvent.replace(list));
+          break;
+        case 'group_created':
+        case 'group_updated':
+          final g = GroupInfo.fromJson(
+              json['group'] as Map<String, dynamic>);
+          _groupListController.add(GroupListEvent.upsert(g));
+          break;
+        case 'group_deleted':
+          _groupListController
+              .add(GroupListEvent.remove(json['group_id'] as String));
+          break;
+        case 'group_info':
+          _groupDetailsController.add(GroupDetails.fromJson(json));
+          break;
+        case 'group_message':
+          _groupMessageController.add(
+              GroupMessage.fromJson(json['message'] as Map<String, dynamic>));
+          break;
+        case 'group_history':
+          final gid = json['group_id'] as String;
+          final msgs = (json['messages'] as List)
+              .map((m) => GroupMessage.fromJson(m as Map<String, dynamic>))
+              .toList();
+          _groupHistoryController.add({gid: msgs});
+          break;
+        case 'group_read_receipt':
+          _groupReadReceiptController.add({
+            'group_id': json['group_id'] as String,
+            'by_user_id': json['by_user_id'] as String,
+          });
+          break;
+        case 'group_member_added':
+        case 'group_member_updated':
+        case 'group_member_removed':
+        case 'group_mark_read_result':
+        case 'group_message_deleted':
           break;
       }
     } catch (e) {
@@ -180,6 +253,96 @@ class ChatService {
     _send({'action': 'ping', 'session_token': _token});
   }
 
+  void listGroups() {
+    _send({'action': 'list_groups', 'session_token': _token});
+  }
+
+  void createGroup({
+    required String name,
+    String? description,
+    String? avatarId,
+    bool? isPrivate,
+    bool? isChannel,
+    List<String>? memberIds,
+  }) {
+    _send({
+      'action': 'create_group',
+      'session_token': _token,
+      'name': name,
+      'description': description,
+      'avatar_id': avatarId,
+      'is_private': isPrivate,
+      'is_channel': isChannel,
+      'member_ids': memberIds,
+    });
+  }
+
+  void groupInfo(String groupId) {
+    _send({
+      'action': 'group_info',
+      'session_token': _token,
+      'group_id': groupId,
+    });
+  }
+
+  void sendGroupMessage({
+    required String groupId,
+    String? text,
+    String? fileId,
+  }) {
+    _send({
+      'action': 'send_group_message',
+      'session_token': _token,
+      'group_id': groupId,
+      'text': text,
+      'file_id': fileId,
+    });
+  }
+
+  void requestGroupHistory(String groupId, {int limit = 100}) {
+    _send({
+      'action': 'group_history',
+      'session_token': _token,
+      'group_id': groupId,
+      'limit': limit,
+    });
+  }
+
+  void markGroupRead(String groupId) {
+    _send({
+      'action': 'mark_group_read',
+      'session_token': _token,
+      'group_id': groupId,
+    });
+  }
+
+  void addGroupMember(String groupId, String userId, {String? role}) {
+    _send({
+      'action': 'add_group_member',
+      'session_token': _token,
+      'group_id': groupId,
+      'user_id': userId,
+      'role': role ?? 'member',
+    });
+  }
+
+  void removeGroupMember(String groupId, String userId) {
+    _send({
+      'action': 'remove_group_member',
+      'session_token': _token,
+      'group_id': groupId,
+      'user_id': userId,
+    });
+  }
+
+  void leaveGroup(String groupId) {
+    _send({
+      'action': 'leave_group',
+      'session_token': _token,
+      'group_id': groupId,
+    });
+  }
+
   void disconnect() {
     _joined = false;
     _channel?.sink.close();
@@ -196,5 +359,11 @@ class ChatService {
     _errorController.close();
     _connectionStateController.close();
     _pongController.close();
+    _groupListController.close();
+    _groupMessageController.close();
+    _groupHistoryController.close();
+    _groupDetailsController.close();
+    _groupReadReceiptController.close();
+    _messageDeletedController.close();
   }
 }

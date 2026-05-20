@@ -1,0 +1,69 @@
+{
+  "app": { "title": "Messenger" },
+  "locale": { "name": "English" },
+  "presence": {
+    "online": "Online",
+    "last_seen": "Last seen at {time}",
+    "unknown": "Last seen unknown"
+  },
+  "notifications": {
+    "dm_title": "New message",
+    "group_title": "Group"
+  },
+  "tabs": { "messages": "Messages", "groups": "Groups" },
+  "chat": {
+    "hint_message": "Message",
+    "say_hi": "Say hi to {name}",
+    "attachment": "Attachment",
+    "no_messages": "No messages yet",
+    "send_file": "Send file",
+    "pick_image": "Image",
+    "uploading": "Uploading…"
+  },
+  "groups": {
+    "title": "Groups",
+    "new_group": "New group",
+    "group_name": "Group name",
+    "create": "Create",
+    "members": "Members",
+    "add_member": "Add member by user ID",
+    "leave": "Leave group",
+    "info": "Group info"
+  },
+  "conversations": {
+    "title": "Messages",
+    "new_chat": "New chat",
+    "username_hint": "Username, email, or UUID",
+    "start": "Start",
+    "empty_query": "Please enter a username or user ID",
+    "lookup_hint": "No user \"{query}\". Use their exact username (GET /getuserinfo) or UUID from Profile. They do not need to be online to receive messages."
+  },
+  "auth": {
+    "sign_in": "Sign in",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "phone": "Phone",
+    "username": "Username",
+    "sign_in_failed": "Could not sign in. Check credentials and server URL in settings.",
+    "session_error": "Session error — auth server may be unreachable.",
+    "register_failed": "Registration failed — check server URL in settings."
+  },
+  "profile": { "title": "Profile", "logout": "Log out" },
+  "settings": {
+    "title": "Server settings",
+    "auth_url": "Auth server URL",
+    "chat_url": "Chat WebSocket URL",
+    "file_url": "File WebSocket URL",
+    "language": "Language",
+    "auth_test": "Test auth",
+    "chat_test": "Test chat",
+    "auth_url_error": "Auth URL must start with http:// or https://",
+    "chat_url_error": "Chat URL must start with ws:// or wss://",
+    "file_url_error": "File URL must start with ws:// or wss://",
+    "save": "Save",
+    "saved": "Saved",
+    "reset": "Reset defaults"
+  },
+  "common": { "cancel": "Cancel", "error": "Error", "ok": "OK", "today": "Today", "yesterday": "Yesterday" }
+}

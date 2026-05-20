@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ServerSettings extends ChangeNotifier {
   static const _keyAuth = 'server_auth_url';
   static const _keyChat = 'server_chat_url';
+  static const _keyFile = 'server_file_ws_url';
 
   static String get defaultAuthUrl =>
       (!kIsWeb && Platform.isAndroid)
@@ -18,13 +19,20 @@ class ServerSettings extends ChangeNotifier {
           ? 'ws://10.0.2.2:3001/ws'
           : 'ws://127.0.0.1:3001/ws';
 
+  static String get defaultFileWsUrl =>
+      (!kIsWeb && Platform.isAndroid)
+          ? 'ws://10.0.2.2:25463/ws'
+          : 'ws://127.0.0.1:25463/ws';
+
   String _authUrl = defaultAuthUrl;
   String _chatUrl = defaultChatUrl;
+  String _fileWsUrl = defaultFileWsUrl;
   bool _loaded = false;
   final Completer<void> _loadCompleter = Completer<void>();
 
   String get authUrl => _authUrl;
   String get chatUrl => _chatUrl;
+  String get fileWsUrl => _fileWsUrl;
   bool get isLoaded => _loaded;
 
   ServerSettings() {
@@ -38,6 +46,7 @@ class ServerSettings extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _authUrl = prefs.getString(_keyAuth) ?? defaultAuthUrl;
       _chatUrl = prefs.getString(_keyChat) ?? defaultChatUrl;
+      _fileWsUrl = prefs.getString(_keyFile) ?? defaultFileWsUrl;
     } finally {
       _loaded = true;
       if (!_loadCompleter.isCompleted) _loadCompleter.complete();
@@ -45,16 +54,18 @@ class ServerSettings extends ChangeNotifier {
     }
   }
 
-  Future<void> save(String authUrl, String chatUrl) async {
+  Future<void> save(String authUrl, String chatUrl, String fileWsUrl) async {
     final prefs = await SharedPreferences.getInstance();
     _authUrl = authUrl.trim();
     _chatUrl = chatUrl.trim();
+    _fileWsUrl = fileWsUrl.trim();
     await prefs.setString(_keyAuth, _authUrl);
     await prefs.setString(_keyChat, _chatUrl);
+    await prefs.setString(_keyFile, _fileWsUrl);
     notifyListeners();
   }
 
   Future<void> reset() async {
-    await save(defaultAuthUrl, defaultChatUrl);
+    await save(defaultAuthUrl, defaultChatUrl, defaultFileWsUrl);
   }
 }
