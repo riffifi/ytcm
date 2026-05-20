@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:io';
+import 'package:path/path.dart' as p;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -15,6 +17,7 @@ import 'file_transfer_service.dart';
 import 'messenger_notifications.dart';
 import 'locale_controller.dart';
 import 'server_settings.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AppState extends ChangeNotifier with WidgetsBindingObserver {
   AuthService auth;
@@ -38,6 +41,8 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
   String? _activeGroupName;
 
   final Map<String, UserPresence?> _presence = {};
+  final Map<String, double> _uploadProgress = {};
+  final Map<String, Uint8List?> _peerAvatarCache = {};
   final List<GroupInfo> _groups = [];
   final Map<String, List<GroupMessage>> _groupMessages = {};
   GroupDetails? _lastGroupDetails;
@@ -147,6 +152,35 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Save bytes to a user-visible location (application documents or downloads folder).
+  /// Returns the saved absolute path on success or null.
+  Future<String?> saveBytesToDevice(Uint8List bytes, String filename) async {
+    try {
+      Directory? dir;
+      // Prefer Downloads if available
+      try {
+        dir = await getDownloadsDirectory();
+      } catch (_) {
+        dir = null;
+      }
+      if (dir == null) {
+        try {
+          dir = await getApplicationDocumentsDirectory();
+        } catch (_) {
+          dir = Directory.systemTemp;
+        }
+      }
+      final safeName = filename.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+      final outPath = p.join(dir.path, safeName);
+      final f = File(outPath);
+      await f.writeAsBytes(bytes, flush: true);
+      return outPath;
+    } catch (e, st) {
+      debugPrint('saveBytesToDevice failed: $e\n$st');
+      return null;
+    }
+  }
+
   Future<void> reconnectWithNewSettings() async {
     await _cancelChatSubscriptions();
     chat.disconnect();
@@ -176,6 +210,18 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     }
     notifyListeners();
   }
+
+  void _setUploadProgress(String localId, double progress) {
+    _uploadProgress[localId] = progress;
+    notifyListeners();
+  }
+
+  void _clearUploadProgress(String localId) {
+    _uploadProgress.remove(localId);
+    notifyListeners();
+  }
+
+  double? getUploadProgress(String localId) => _uploadProgress[localId];
 
   Future<void> _init() async {
     await serverSettings.ensureLoaded();
@@ -513,6 +559,48 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Forward an existing message (DM or group message) to a single peer.
+  Future<void> forwardMessage({
+    required Message message,
+    required String toUserId,
+  }) async {
+    final tok = _token;
+    final meId = _me?.uuid;
+    if (tok == null || meId == null) return;
+
+    // optimistic in recipient conversation
+    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    final optimistic = Message(
+      uuid: localId,
+      senderId: meId,
+      receiverId: toUserId,
+      dialogId: '',
+      text: message.text,
+      fileId: null,
+      createdAt: DateTime.now(),
+      status: 0,
+    );
+    _conversations.putIfAbsent(toUserId, () => []);
+    _conversations[toUserId]!.add(optimistic);
+    notifyListeners();
+
+    try {
+      if (message.fileId != null) {
+        // grant access to recipient
+        await _files().grantAccess(sessionToken: tok, fileId: message.fileId!, userId: toUserId);
+      }
+      // send using chat service
+      chat.sendMessage(receiverId: toUserId, text: message.text, fileId: message.fileId);
+    } catch (_) {
+      // on failure, remove optimistic
+      final list = _conversations[toUserId];
+      if (list != null) {
+        list.removeWhere((m) => m.uuid == localId);
+      }
+    }
+    notifyListeners();
+  }
+
   void _onHistory(Map<String, List<Message>> event) {
     event.forEach((userId, msgs) {
       if (msgs.isNotEmpty) {
@@ -785,36 +873,64 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
     final meId = _me?.uuid;
     if (receiverId == null || tok == null || meId == null) return;
     if (!chat.isConnected) return;
-
-    final fileId = await _files().uploadBytes(
-      sessionToken: tok,
-      bytes: bytes,
-      filename: filename,
-      mimeType: mimeType,
-    );
-    await _files().grantAccess(
-      sessionToken: tok,
-      fileId: fileId,
-      userId: receiverId,
-    );
-
+    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
     final optimistic = Message(
-      uuid: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      uuid: localId,
       senderId: meId,
       receiverId: receiverId,
       dialogId: '',
       text: caption,
-      fileId: fileId,
+      fileId: null,
       createdAt: DateTime.now(),
       status: 0,
     );
     _onMessage(optimistic);
+    _setUploadProgress(localId, 0.0);
 
-    chat.sendMessage(
-      receiverId: receiverId,
-      text: caption,
-      fileId: fileId,
-    );
+    try {
+      final fileId = await _files().uploadBytes(
+        sessionToken: tok,
+        bytes: bytes,
+        filename: filename,
+        mimeType: mimeType,
+        onProgress: (sent, total) {
+          final p = total > 0 ? sent / total : 0.0;
+          _setUploadProgress(localId, p);
+        },
+      );
+      await _files().grantAccess(
+        sessionToken: tok,
+        fileId: fileId,
+        userId: receiverId,
+      );
+
+      // replace optimistic message with one containing real fileId
+      final list = _conversations[receiverId];
+      if (list != null) {
+        final idx = list.indexWhere((m) => m.uuid == localId);
+        if (idx != -1) {
+          list[idx] = Message(
+            uuid: localId,
+            senderId: meId,
+            receiverId: receiverId,
+            dialogId: '',
+            text: caption,
+            fileId: fileId,
+            createdAt: DateTime.now(),
+            status: 0,
+          );
+        }
+      }
+
+      chat.sendMessage(
+        receiverId: receiverId,
+        text: caption,
+        fileId: fileId,
+      );
+    } finally {
+      _clearUploadProgress(localId);
+      notifyListeners();
+    }
   }
 
   Future<void> sendActiveGroupFile({
@@ -836,27 +952,173 @@ class AppState extends ChangeNotifier with WidgetsBindingObserver {
       await Future.delayed(const Duration(milliseconds: 120));
     }
 
-    final fileId = await _files().uploadBytes(
-      sessionToken: tok,
-      bytes: bytes,
-      filename: filename,
-      mimeType: mimeType,
+    final localId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+    final optimistic = GroupMessage(
+      uuid: localId,
+      groupId: gid,
+      senderId: _me!.uuid,
+      text: caption,
+      fileId: null,
+      createdAt: DateTime.now(),
+      whoDelivered: const [],
+      whoRead: const [],
+      deletedForEveryone: false,
+      status: 'pending',
     );
+    _groupMessages.putIfAbsent(gid, () => []);
+    _groupMessages[gid]!.add(optimistic);
+    _setUploadProgress(localId, 0.0);
+    notifyListeners();
 
-    for (final m in _lastGroupDetails?.members ?? const <GroupMember>[]) {
-      if (m.userId != _me?.uuid) {
-        try {
-          await _files().grantAccess(
-            sessionToken: tok,
+    try {
+      final fileId = await _files().uploadBytes(
+        sessionToken: tok,
+        bytes: bytes,
+        filename: filename,
+        mimeType: mimeType,
+        onProgress: (sent, total) {
+          final p = total > 0 ? sent / total : 0.0;
+          _setUploadProgress(localId, p);
+        },
+      );
+
+      for (final m in _lastGroupDetails?.members ?? const <GroupMember>[]) {
+        if (m.userId != _me?.uuid) {
+          try {
+            await _files().grantAccess(
+              sessionToken: tok,
+              fileId: fileId,
+              userId: m.userId,
+            );
+          } catch (_) {}
+        }
+      }
+
+      // replace optimistic group message with final one
+      final list = _groupMessages[gid];
+      if (list != null) {
+        final idx = list.indexWhere((m) => m.uuid == localId);
+        if (idx != -1) {
+          list[idx] = GroupMessage(
+            uuid: localId,
+            groupId: gid,
+            senderId: _me!.uuid,
+            text: caption,
             fileId: fileId,
-            userId: m.userId,
+            createdAt: DateTime.now(),
+            whoDelivered: const [],
+            whoRead: const [],
+            deletedForEveryone: false,
+            status: 'sent',
           );
-        } catch (_) {}
+        }
+      }
+
+      chat.sendGroupMessage(groupId: gid, text: caption, fileId: fileId);
+    } finally {
+      _clearUploadProgress(localId);
+      notifyListeners();
+    }
+  }
+
+  /// Update group metadata (name/description/avatar). If [avatarBytes] is
+  /// provided, upload it first and grant access to group members.
+  Future<bool> updateGroupDetails({
+    required String groupId,
+    String? name,
+    String? description,
+    Uint8List? avatarBytes,
+    String avatarFilename = 'avatar.jpg',
+    String avatarMime = 'image/jpeg',
+  }) async {
+    final tok = _token;
+    if (tok == null || !chat.isConnected) return false;
+
+    String? avatarId;
+    if (avatarBytes != null) {
+      try {
+        avatarId = await _files().uploadBytes(
+          sessionToken: tok,
+          bytes: avatarBytes,
+          filename: avatarFilename,
+          mimeType: avatarMime,
+        );
+
+        // grant access to group members
+        for (final m in _lastGroupDetails?.members ?? const <GroupMember>[]) {
+          try {
+            await _files().grantAccess(sessionToken: tok, fileId: avatarId, userId: m.userId);
+          } catch (_) {}
+        }
+      } catch (e) {
+        return false;
       }
     }
 
-    chat.sendGroupMessage(groupId: gid, text: caption, fileId: fileId);
+    try {
+      chat.updateGroup(groupId: groupId, name: name, description: description, avatarId: avatarId);
+      // refresh info
+      chat.groupInfo(groupId);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
+
+  /// Update current user's avatar by uploading bytes and notifying server.
+  Future<bool> updateMyAvatar({
+    required Uint8List bytes,
+    String filename = 'avatar.jpg',
+    String mimeType = 'image/jpeg',
+  }) async {
+    final tok = _token;
+    if (tok == null) return false;
+    try {
+      final fileId = await _files().uploadBytes(
+        sessionToken: tok,
+        bytes: bytes,
+        filename: filename,
+        mimeType: mimeType,
+      );
+      // try to notify server via chat websocket (server may support update_profile)
+      try {
+        chat.updateProfileAvatar(avatarId: fileId);
+      } catch (_) {}
+
+      // If auth server supports HTTP profile update, try to refresh session info
+      final info = await auth.getSessionInfo(tok);
+      if (info != null) {
+        _me = info;
+        notifyListeners();
+      }
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Get avatar bytes for a peer (by userId). Will attempt to fetch profile via
+  /// auth server if needed and then download the avatar file. Caches result.
+  Future<Uint8List?> getPeerAvatarBytes(String userId, String username) async {
+    if (_peerAvatarCache.containsKey(userId)) return _peerAvatarCache[userId];
+    final tok = _token;
+    if (tok == null) return null;
+    try {
+      final profile = await auth.getUserProfile(tok, username, uuid: userId);
+      final avatarId = profile?.avatarId;
+      if (avatarId == null) {
+        _peerAvatarCache[userId] = null;
+        return null;
+      }
+      final data = await downloadFileBytes(avatarId);
+      _peerAvatarCache[userId] = data;
+      return data;
+    } catch (_) {
+      _peerAvatarCache[userId] = null;
+      return null;
+    }
+  }
+
 
   List<Message> getMessages(String userId) => _conversations[userId] ?? [];
 

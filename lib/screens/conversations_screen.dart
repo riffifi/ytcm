@@ -1,8 +1,8 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../models/group_models.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
 import '../services/locale_controller.dart';
@@ -18,22 +18,7 @@ class ConversationsScreen extends StatefulWidget {
   State<ConversationsScreen> createState() => _ConversationsScreenState();
 }
 
-class _ConversationsScreenState extends State<ConversationsScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tab;
-
-  @override
-  void initState() {
-    super.initState();
-    _tab = TabController(length: 2, vsync: this);
-    _tab.addListener(() => setState(() {}));
-  }
-
-  @override
-  void dispose() {
-    _tab.dispose();
-    super.dispose();
-  }
+class _ConversationsScreenState extends State<ConversationsScreen> {
 
   @override
   Widget build(BuildContext context) {
@@ -46,16 +31,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
-        title: TabBar(
-          controller: _tab,
-          indicatorColor: c.accent,
-          labelColor: c.primary,
-          unselectedLabelColor: c.secondary,
-          tabs: [
-            Tab(text: context.str('tabs.messages')),
-            Tab(text: context.str('tabs.groups')),
-          ],
-        ),
+        title: Text(context.str('conversations.title')),
         actions: [
           GestureDetector(
             onTap: () => Navigator.push(
@@ -64,11 +40,22 @@ class _ConversationsScreenState extends State<ConversationsScreen>
             ),
             child: Container(
               margin: const EdgeInsets.only(right: 16),
-              child: _Avatar(
-                label: state.me?.initials ?? '?',
-                size: 32,
-                color: c.accentSoft,
-                textColor: c.accent,
+              child: FutureBuilder<Uint8List?>(
+                future: state.me?.avatarId != null ? state.downloadFileBytes(state.me!.avatarId!) : Future.value(null),
+                builder: (ctx, snap) {
+                  if (snap.hasData && snap.data != null && snap.data!.isNotEmpty) {
+                    return CircleAvatar(
+                      radius: 16,
+                      backgroundImage: MemoryImage(snap.data!),
+                    );
+                  }
+                  return _Avatar(
+                    label: state.me?.initials ?? '?',
+                    size: 32,
+                    color: c.accentSoft,
+                    textColor: c.accent,
+                  );
+                },
               ),
             ),
           ),
@@ -98,42 +85,144 @@ class _ConversationsScreenState extends State<ConversationsScreen>
           ),
         ),
       ),
-      body: TabBarView(
-        controller: _tab,
-        children: [
-          peers.isEmpty
-              ? _emptyMessages(context)
-              : ListView.builder(
-                  padding: EdgeInsets.zero,
-                  itemCount: peers.length,
-                  itemBuilder: (context, i) =>
-                      _ConversationTile(peer: peers[i]),
-                ),
-          _GroupsBody(onOpenGroup: (g) {
-            state.openGroupChat(g.uuid, g.name);
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const GroupChatScreen()),
-            );
-          }),
-        ],
-      ),
+      body: peers.isEmpty && state.groups.isEmpty
+          ? _emptyMessages(context)
+          : ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                if (peers.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: Text(
+                      context.str('tabs.messages'),
+                      style: TextStyle(
+                        color: c.secondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  ...peers.map((p) => _ConversationTile(peer: p)),
+                ],
+                if (state.groups.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Text(
+                      context.str('tabs.groups'),
+                      style: TextStyle(
+                        color: c.secondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  ...state.groups.map((g) {
+                    final unread = state.getGroupUnreadCount(g.uuid, state.me?.uuid ?? '');
+                    final last = state.getLastGroupMessage(g.uuid);
+                    return ListTile(
+                      leading: g.avatarId != null
+                          ? FutureBuilder<Uint8List?>(
+                              future: context.read<AppState>().downloadFileBytes(g.avatarId!),
+                              builder: (ctx, snap) {
+                                if (snap.hasData && snap.data != null && snap.data!.isNotEmpty) {
+                                  return CircleAvatar(
+                                    backgroundColor: c.accentSoft,
+                                    backgroundImage: MemoryImage(snap.data!),
+                                  );
+                                }
+                                return CircleAvatar(
+                                  backgroundColor: c.accentSoft,
+                                  child: Text(
+                                    g.name.isNotEmpty ? g.name[0].toUpperCase() : '?',
+                                    style: TextStyle(color: c.accent),
+                                  ),
+                                );
+                              },
+                            )
+                          : CircleAvatar(
+                              backgroundColor: c.accentSoft,
+                              child: Text(
+                                g.name.isNotEmpty ? g.name[0].toUpperCase() : '?',
+                                style: TextStyle(color: c.accent),
+                              ),
+                            ),
+                      title: Text(g.name, style: TextStyle(color: c.primary)),
+                      subtitle: Text(
+                        last == null
+                            ? context.str('chat.no_messages')
+                            : (last.fileId != null
+                                ? context.str('chat.attachment')
+                                : last.previewText),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: c.secondary, fontSize: 13),
+                      ),
+                      trailing: unread > 0
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: c.accent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '$unread',
+                                style: const TextStyle(color: Colors.white, fontSize: 11),
+                              ),
+                            )
+                          : null,
+                      onTap: () {
+                        state.openGroupChat(g.uuid, g.name);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const GroupChatScreen()),
+                        );
+                      },
+                    );
+                  }),
+                ],
+                const SizedBox(height: 80),
+              ],
+            ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          if (_tab.index == 0) {
-            _showNewChatModal(context);
-          } else {
-            _showNewGroupDialog(context);
-          }
-        },
+        onPressed: () => _showNewChatChoice(context),
         backgroundColor: c.accent,
-        child: Icon(
-          _tab.index == 0 ? Icons.chat_bubble_outline : Icons.group_add,
-          color: Colors.white,
+        child: const Icon(Icons.add, color: Colors.white),
+        tooltip: context.str('conversations.new_chat'),
+      ),
+    );
+  }
+
+  void _showNewChatChoice(BuildContext context) {
+    final c = context.mc;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: c.surfaceHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.chat_bubble_outline),
+              title: Text(context.str('conversations.new_chat')),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showNewChatModal(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.group_add),
+              title: Text(context.str('groups.new_group')),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showNewGroupDialog(context);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
         ),
-        tooltip: _tab.index == 0
-            ? context.str('conversations.new_chat')
-            : context.str('groups.new_group'),
       ),
     );
   }
@@ -368,73 +457,7 @@ class _ConversationsScreenState extends State<ConversationsScreen>
   }
 }
 
-class _GroupsBody extends StatelessWidget {
-  const _GroupsBody({required this.onOpenGroup});
 
-  final void Function(GroupInfo g) onOpenGroup;
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.mc;
-    final state = context.watch<AppState>();
-    final groups = state.groups;
-    final me = state.me?.uuid ?? '';
-
-    if (groups.isEmpty) {
-      return Center(
-        child: Text(
-          context.str('groups.title'),
-          style: TextStyle(color: c.secondary),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      padding: EdgeInsets.zero,
-      itemCount: groups.length,
-      itemBuilder: (context, i) {
-        final g = groups[i];
-        final unread = state.getGroupUnreadCount(g.uuid, me);
-        final last = state.getLastGroupMessage(g.uuid);
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: c.accentSoft,
-            child: Text(
-              g.name.isNotEmpty ? g.name[0].toUpperCase() : '?',
-              style: TextStyle(color: c.accent),
-            ),
-          ),
-          title: Text(g.name, style: TextStyle(color: c.primary)),
-          subtitle: Text(
-            last == null
-                ? context.str('chat.no_messages')
-                : (last.fileId != null
-                    ? context.str('chat.attachment')
-                    : last.previewText),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: c.secondary, fontSize: 13),
-          ),
-          trailing: unread > 0
-              ? Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: c.accent,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '$unread',
-                    style: const TextStyle(color: Colors.white, fontSize: 11),
-                  ),
-                )
-              : null,
-          onTap: () => onOpenGroup(g),
-        );
-      },
-    );
-  }
-}
 
 class _ConversationTile extends StatefulWidget {
   final ConversationPeer peer;
@@ -486,7 +509,19 @@ class _ConversationTileState extends State<_ConversationTile> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
             children: [
-              _Avatar(label: label),
+              FutureBuilder<Uint8List?>(
+                future: state.getPeerAvatarBytes(peer.userId, peer.username),
+                builder: (ctx, snap) {
+                  if (snap.hasData && snap.data != null && snap.data!.isNotEmpty) {
+                    return CircleAvatar(
+                      backgroundColor: c.accentSoft,
+                      backgroundImage: MemoryImage(snap.data!),
+                      radius: 22,
+                    );
+                  }
+                  return _Avatar(label: label);
+                },
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -573,7 +608,6 @@ class _ConversationTileState extends State<_ConversationTile> {
   }
 
   String _formatTime(BuildContext context, DateTime dt) {
-    final c = context.mc;
     final now = DateTime.now();
     final diff = now.difference(dt);
     if (diff.inDays == 0) return DateFormat('HH:mm').format(dt);

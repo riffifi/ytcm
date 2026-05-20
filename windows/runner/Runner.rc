@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "ytcm" "\0"
+            VALUE "FileDescription", "YeChat" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "ytcm" "\0"
+            VALUE "InternalName", "YeChat" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "ytcm.exe" "\0"
-            VALUE "ProductName", "ytcm" "\0"
+            VALUE "OriginalFilename", "YeChat.exe" "\0"
+            VALUE "ProductName", "YeChat" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

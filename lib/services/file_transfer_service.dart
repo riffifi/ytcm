@@ -15,9 +15,18 @@ class FileTransferService {
     required Uint8List bytes,
     required String filename,
     required String mimeType,
+    void Function(int sent, int total)? onProgress,
   }) async {
     final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
     await channel.ready.timeout(const Duration(seconds: 30));
+    // split into chunks for progress reporting
+    const chunkSize = 64 * 1024; // 64KB
+    final total = bytes.length;
+    final chunks = <List<int>>[];
+    for (var offset = 0; offset < total; offset += chunkSize) {
+      final end = (offset + chunkSize) > total ? total : offset + chunkSize;
+      chunks.add(bytes.sublist(offset, end));
+    }
 
     final init = jsonEncode({
       'message_type': 'upload',
@@ -25,51 +34,72 @@ class FileTransferService {
         'session_token': sessionToken,
         'filename': filename,
         'mime_type': mimeType,
-        'total_size': bytes.length,
+        'total_size': total,
         'chunk_index': 0,
-        'total_chunks': 1,
+        'total_chunks': chunks.length,
       },
     });
     channel.sink.add(init);
 
     String? fileId;
-    await for (final event in channel.stream) {
-      if (event is String) {
-        final map = jsonDecode(event) as Map<String, dynamic>;
-        if (map['success'] == true && map['file_id'] != null) {
-          fileId = map['file_id'] as String;
-          final msg = map['message'] as String? ?? '';
-          if (msg.contains('binary') ||
-              msg.contains('Upload accepted') ||
-              msg.contains('Upload started')) {
-            break;
-          }
-        } else {
-          await channel.sink.close();
-          throw Exception(map['message'] ?? 'Upload rejected');
-        }
-      }
-    }
-
-    channel.sink.add(bytes);
-
-    await for (final event in channel.stream) {
-      if (event is String) {
-        final map = jsonDecode(event) as Map<String, dynamic>;
-        if (map['success'] == true) {
-          final msg = map['message'] as String? ?? '';
-          if (msg.contains('complete')) {
+    final iterator = StreamIterator(channel.stream);
+    try {
+      // Wait for initial server response that accepts the upload
+      while (await iterator.moveNext()) {
+        final event = iterator.current;
+        if (event is String) {
+          final map = jsonDecode(event) as Map<String, dynamic>;
+          if (map['success'] == true && map['file_id'] != null) {
+            fileId = map['file_id'] as String;
+            final msg = map['message'] as String? ?? '';
+            if (msg.contains('binary') ||
+                msg.contains('Upload accepted') ||
+                msg.contains('Upload started')) {
+              break;
+            }
+          } else {
             await channel.sink.close();
-            return (map['file_id'] as String?) ?? fileId!;
+            throw Exception(map['message'] ?? 'Upload rejected');
           }
-        } else {
-          await channel.sink.close();
-          throw Exception(map['message'] ?? 'Upload failed');
         }
       }
+
+      // send chunks sequentially
+      var sent = 0;
+      for (var i = 0; i < chunks.length; i++) {
+        channel.sink.add(chunks[i]);
+        sent += chunks[i].length;
+        try {
+          onProgress?.call(sent, total);
+        } catch (_) {}
+        // small yield to allow UI update
+        await Future.delayed(const Duration(milliseconds: 1));
+      }
+
+      // Wait for completion message
+      while (await iterator.moveNext()) {
+        final event = iterator.current;
+        if (event is String) {
+          final map = jsonDecode(event) as Map<String, dynamic>;
+          if (map['success'] == true) {
+            final msg = map['message'] as String? ?? '';
+            if (msg.contains('complete')) {
+              await channel.sink.close();
+              return (map['file_id'] as String?) ?? fileId!;
+            }
+          } else {
+            await channel.sink.close();
+            throw Exception(map['message'] ?? 'Upload failed');
+          }
+        }
+      }
+    } finally {
+      try {
+        await iterator.cancel();
+      } catch (_) {}
+      await channel.sink.close();
     }
 
-    await channel.sink.close();
     throw Exception('Upload did not complete');
   }
 
@@ -124,10 +154,23 @@ class FileTransferService {
 
     await for (final event in channel.stream) {
       if (event is String) {
+        // Some servers may return metadata or may include the whole file as
+        // base64-encoded payload in a JSON field like 'data'. Handle that.
         final map = jsonDecode(event) as Map<String, dynamic>;
         if (map['success'] != true) {
           await channel.sink.close();
           throw Exception(map['message'] ?? 'download denied');
+        }
+        // If server inlines file data as base64 string, decode and return.
+        final maybeData = map['data'];
+        if (maybeData is String && maybeData.isNotEmpty) {
+          try {
+            final decoded = base64Decode(maybeData);
+            await channel.sink.close();
+            return decoded;
+          } catch (_) {
+            // not base64 — continue to treat as metadata
+          }
         }
         totalChunks = (map['total_chunks'] as num?)?.toInt() ?? 1;
       } else if (event is List<int>) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../services/app_state.dart';
 import '../services/theme_preferences.dart';
 import '../theme.dart';
@@ -59,23 +60,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Center(
             child: Column(
               children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: c.accentSoft,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: c.accent.withOpacity(0.3)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      me?.initials ?? '?',
-                      style: TextStyle(
-                          color: c.accent,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w600),
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: c.accentSoft,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: c.accent.withOpacity(0.3)),
+                      ),
+                      child: Center(
+                        child: Text(
+                          me?.initials ?? '?',
+                          style: TextStyle(
+                              color: c.accent,
+                              fontSize: 28,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
                     ),
-                  ),
+                    GestureDetector(
+                      onTap: () async {
+                        final img = await ImagePicker().pickImage(source: ImageSource.gallery);
+                        if (img == null) return;
+                        setState(() => _saving = true);
+                        final bytes = await img.readAsBytes();
+                        final ok = await context.read<AppState>().updateMyAvatar(bytes: bytes, filename: img.name, mimeType: 'image/jpeg');
+                        setState(() => _saving = false);
+                        if (!mounted) return;
+                        if (ok) {
+                          showMessengerSnackBar(context, 'Аватар обновлён');
+                        } else {
+                          showMessengerSnackBar(context, 'Не удалось обновить аватар');
+                        }
+                      },
+                      child: Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          color: c.surface,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: c.border),
+                        ),
+                        child: Icon(Icons.camera_alt, size: 18, color: c.secondary),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 Text(

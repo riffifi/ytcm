@@ -326,6 +326,32 @@ class ChatService {
     });
   }
 
+  /// Update group metadata (name/description/avatar_id).
+  void updateGroup({
+    required String groupId,
+    String? name,
+    String? description,
+    String? avatarId,
+  }) {
+    _send({
+      'action': 'update_group',
+      'session_token': _token,
+      'group_id': groupId,
+      'name': name,
+      'description': description,
+      'avatar_id': avatarId,
+    });
+  }
+
+  /// Request server to update current user's profile avatar (if supported).
+  void updateProfileAvatar({required String avatarId}) {
+    _send({
+      'action': 'update_profile',
+      'session_token': _token,
+      'avatar_id': avatarId,
+    });
+  }
+
   void removeGroupMember(String groupId, String userId) {
     _send({
       'action': 'remove_group_member',

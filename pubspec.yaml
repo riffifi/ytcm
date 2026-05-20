@@ -18,14 +18,23 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   file_picker: ^8.1.4
   image_picker: ^1.1.2
+  path_provider: ^2.0.14
+  path: ^1.8.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.10.0
 
 flutter:
   uses-material-design: true
+
+# Configuration for flutter_launcher_icons
+flutter_icons:
+  android: true
+  ios: false
+  image_path: "Yellow Tea Crew logoC1.png"
 
   assets:
     - assets/l10n/

@@ -70,6 +70,7 @@ class UserInfo {
   final String username;
   final String? firstName;
   final String? lastName;
+  final String? avatarId;
   final String? dateOfBirth;
   final String? additionalInfo;
 
@@ -80,6 +81,7 @@ class UserInfo {
     this.lastName,
     this.dateOfBirth,
     this.additionalInfo,
+    this.avatarId,
   });
 
   factory UserInfo.fromSessionJson(Map<String, dynamic> json) => UserInfo(
@@ -95,6 +97,7 @@ class UserInfo {
         lastName: json['last_name'],
         dateOfBirth: json['date_of_birth'],
         additionalInfo: json['additional_info'],
+        avatarId: json['avatar_id'] as String?,
       );
 
   String get displayName {
