@@ -8,24 +8,63 @@ import '../utils/messenger_haptics.dart';
 import 'chat_screen.dart';
 import '../widgets/conversation_context_menu.dart';
 import 'groups_screen.dart';
+import '../widgets/user_avatar.dart';
+import '../utils/profile_extras.dart';
 import 'settings_screen.dart';
+import '../utils/platform_ui.dart';
 
-class ConversationsScreen extends StatelessWidget {
-  const ConversationsScreen({super.key});
+class ConversationsScreen extends StatefulWidget {
+  final bool selectionMode;
+  final String? selectedPeerId;
+  final ValueChanged<ConversationPeer>? onPeerSelected;
+
+  const ConversationsScreen({
+    super.key,
+    this.selectionMode = false,
+    this.selectedPeerId,
+    this.onPeerSelected,
+  });
+
+  static void showNewChatModal(BuildContext context) {
+    final c = context.mc;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: c.surfaceHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => const _NewChatSheet(),
+    );
+  }
+
+  @override
+  State<ConversationsScreen> createState() => _ConversationsScreenState();
+}
+
+class _ConversationsScreenState extends State<ConversationsScreen> {
+  String _prefetchKey = '';
+
+  void _scheduleProfilePrefetch(List<ConversationPeer> peers) {
+    final key = peers.map((p) => p.userId).join('\x1e');
+    if (key == _prefetchKey) return;
+    _prefetchKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<AppState>().prefetchPeerProfiles(
+        peers.map((p) => p.userId),
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.mc;
-    return Selector<AppState, ({List<ConversationPeer> peers, String? status})>(
-      selector: (_, s) => (
-        peers: s.conversationPeers,
-        status: s.chatStatus?.trim(),
-      ),
-      builder: (context, data, _) {
-        final peers = data.peers;
-        final status = data.status;
-        final showStatus = status != null && status.isNotEmpty;
-        return _buildScaffold(context, c, peers, showStatus, status);
+    return Selector<AppState, List<ConversationPeer>>(
+      selector: (_, s) => s.conversationPeers,
+      builder: (context, peers, _) {
+        _scheduleProfilePrefetch(peers);
+        return _buildScaffold(context, c, peers);
       },
     );
   }
@@ -34,8 +73,6 @@ class ConversationsScreen extends StatelessWidget {
     BuildContext context,
     AppColors c,
     List<ConversationPeer> peers,
-    bool showStatus,
-    String? status,
   ) {
 
     return Scaffold(
@@ -81,43 +118,23 @@ class ConversationsScreen extends StatelessWidget {
             ),
           ),
         ],
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(showStatus ? 33 : 1),
-          child: Column(
-            children: [
-              if (showStatus)
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                  color: c.surfaceHigh,
-                  child: Text(
-                    status!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: c.secondary,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              Container(height: 1, color: c.border),
-            ],
-          ),
-        ),
       ),
       body: peers.isEmpty
           ? _emptyState(context)
           : ListView.builder(
               padding: EdgeInsets.zero,
               itemCount: peers.length,
-              itemBuilder: (context, i) =>
-                  _ConversationTile(peer: peers[i]),
+              itemBuilder: (context, i) => _ConversationTile(
+                peer: peers[i],
+                selectionMode: widget.selectionMode,
+                selected: widget.selectedPeerId == peers[i].userId,
+                onPeerSelected: widget.onPeerSelected,
+              ),
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           messengerHapticMedium();
-          _showNewChatModal(context);
+          ConversationsScreen.showNewChatModal(context);
         },
         backgroundColor: c.accent,
         elevation: 3,
@@ -131,20 +148,6 @@ class ConversationsScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  void _showNewChatModal(BuildContext context) {
-    final c = context.mc;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: c.surfaceHigh,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => const _NewChatSheet(),
     );
   }
 
@@ -412,7 +415,16 @@ class _NewChatSheetState extends State<_NewChatSheet> {
 
 class _ConversationTile extends StatelessWidget {
   final ConversationPeer peer;
-  const _ConversationTile({required this.peer});
+  final bool selectionMode;
+  final bool selected;
+  final ValueChanged<ConversationPeer>? onPeerSelected;
+
+  const _ConversationTile({
+    required this.peer,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onPeerSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -421,20 +433,28 @@ class _ConversationTile extends StatelessWidget {
     final lastMsg = state.getLastMessage(peer.userId);
     final preview = state.lastMessagePreview(peer.userId);
     final unread = state.getUnreadCount(peer.userId);
-    final label = peer.username.isNotEmpty
-        ? peer.username[0].toUpperCase()
-        : '?';
+    final displayName = state.peerDisplayName(peer.userId);
+    final profile = state.peerProfile(peer.userId);
+    final extras = ProfileExtras.parse(profile?.additionalInfo);
+    final online = state.isPeerOnline(peer.userId);
+    final initials = profile?.initials ??
+        (displayName.isNotEmpty ? displayName[0].toUpperCase() : '?');
 
     return Material(
-      color: Colors.transparent,
+      color: selected ? c.accentSoft.withValues(alpha: 0.35) : Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: () {
           messengerHapticLight();
           state.openChat(peer.userId, peer.username);
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const ChatScreen()),
-          );
+          if (selectionMode && onPeerSelected != null) {
+            onPeerSelected!(peer);
+          } else {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ChatScreen()),
+            );
+          }
         },
         onLongPress: conversationContextMenuIsDesktop(context)
             ? null
@@ -452,25 +472,54 @@ class _ConversationTile extends StatelessWidget {
                 )
             : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              _Avatar(label: label),
+              Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  UserAvatar(
+                    avatarFileId: extras.avatarFileId,
+                    initials: initials,
+                    radius: 22,
+                  ),
+                  if (online)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: c.success,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: c.bg, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
                           child: Text(
-                            peer.username,
+                            displayName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: c.primary,
                               fontSize: 15,
+                              height: 1.2,
                               fontWeight:
                                   unread > 0 ? FontWeight.w600 : FontWeight.w500,
                             ),
@@ -482,12 +531,14 @@ class _ConversationTile extends StatelessWidget {
                             style: TextStyle(
                               color: unread > 0 ? c.accent : c.tertiary,
                               fontSize: 11,
+                              height: 1.2,
                             ),
                           ),
                       ],
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 2),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Expanded(
                           child: Text(
@@ -497,6 +548,7 @@ class _ConversationTile extends StatelessWidget {
                             style: TextStyle(
                               color: unread > 0 ? c.primary : c.secondary,
                               fontSize: 13,
+                              height: 1.2,
                             ),
                           ),
                         ),
@@ -510,7 +562,7 @@ class _ConversationTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right, color: c.border, size: 16),
+              Icon(Icons.chevron_right, color: c.border, size: 20),
             ],
           ),
         ),

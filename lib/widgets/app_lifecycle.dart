@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/app_state.dart';
+import '../services/background_messaging.dart';
 import '../services/message_listener_service.dart';
 import '../services/notification_preferences.dart';
 import '../services/notification_service.dart';
@@ -51,7 +52,6 @@ class _AppLifecycleBridgeState extends State<AppLifecycleBridge>
       case AppLifecycleState.resumed:
         _backgroundDebounce?.cancel();
         _syncForegroundState(resumed: true);
-        MessageListenerService.stop();
         if (mounted) {
           context.read<AppState>().onAppResumed();
         }
@@ -88,9 +88,9 @@ class _AppLifecycleBridgeState extends State<AppLifecycleBridge>
       if (!notifPrefs.enabled) return;
     }
 
-    // Hand off to foreground listener (uses URLs from Server settings).
+    // UI releases its socket; background service keeps listening.
     await appState.prepareForBackgroundListener();
-    await MessageListenerService.start();
+    await BackgroundMessaging.ensureRunning();
   }
 
   @override

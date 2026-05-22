@@ -103,15 +103,23 @@ class UserInfo {
         username: json['username'],
       );
 
-  factory UserInfo.fromProfileJson(Map<String, dynamic> json, String uuid) =>
-      UserInfo(
-        uuid: uuid,
-        username: json['username'],
-        firstName: json['first_name'],
-        lastName: json['last_name'],
-        dateOfBirth: json['date_of_birth'],
-        additionalInfo: json['additional_info'],
-      );
+  factory UserInfo.fromProfileJson(Map<String, dynamic> json, String uuid) {
+    String? clean(dynamic v) {
+      if (v == null) return null;
+      final s = v.toString().trim();
+      if (s.isEmpty || s == 'null') return null;
+      return s;
+    }
+
+    return UserInfo(
+      uuid: uuid,
+      username: clean(json['username']) ?? uuid,
+      firstName: clean(json['first_name']),
+      lastName: clean(json['last_name']),
+      dateOfBirth: clean(json['date_of_birth']),
+      additionalInfo: clean(json['additional_info']),
+    );
+  }
 
   String get displayName {
     if (firstName != null && firstName!.isNotEmpty) {

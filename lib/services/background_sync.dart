@@ -6,6 +6,7 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
+import 'background_messaging.dart';
 import 'chat_socket_runner.dart';
 import 'conversation_store.dart';
 import 'message_listener_service.dart';
@@ -22,6 +23,7 @@ void backgroundSyncDispatcher() {
   Workmanager().executeTask((taskName, inputData) async {
     if (taskName != _taskName) return true;
     try {
+      await BackgroundMessaging.ensureRunning();
       await BackgroundSync.runOnce();
       return true;
     } catch (_) {
@@ -32,7 +34,8 @@ void backgroundSyncDispatcher() {
 
 /// Fallback sync when the foreground listener is not running.
 class BackgroundSync {
-  static bool get isSupported => !kIsWeb && Platform.isAndroid;
+  static bool get isSupported =>
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
   static bool _registered = false;
 
   static Future<void> register() async {
@@ -70,7 +73,10 @@ class BackgroundSync {
 
   static Future<void> runOnce() async {
     if (!isSupported) return;
-    if (await FlutterBackgroundService().isRunning()) return;
+    if (Platform.isAndroid &&
+        await FlutterBackgroundService().isRunning()) {
+      return;
+    }
 
     final endpoints = await ServerEndpoints.fromPrefs();
     final chatUrl = endpoints.chatUrl;
@@ -86,11 +92,13 @@ class BackgroundSync {
     NotificationService.instance.setAppForeground(false);
 
     final store = ConversationStore();
+    await store.load();
+    final historyPeerIds = ChatSocketRunner.peerIdsFromStore(store, max: 20);
 
     await ChatSocketRunner.listen(
       chatUrl: chatUrl,
       sessionToken: token,
-      historyPeerIds: const [],
+      historyPeerIds: historyPeerIds,
       maxDuration: const Duration(seconds: 40),
       shouldStop: () => false,
       onLiveMessage: (msg) async {
@@ -108,7 +116,7 @@ class BackgroundSync {
         final title = store.nameFor(msg.senderId) ??
             'User ${msg.senderId.substring(0, 8)}';
         await NotificationService.instance.showIncomingMessage(
-          peerId: msg.uuid,
+          peerId: msg.senderId,
           title: title,
           body: msg.previewText.isNotEmpty ? msg.previewText : 'New message',
           force: true,

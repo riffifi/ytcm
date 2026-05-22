@@ -3,9 +3,11 @@ import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/group_models.dart';
 import '../models/models.dart';
+import 'messenger_log.dart';
 
 class ChatService {
   final String wsUrl;
+  final MessengerLog? log;
   WebSocketChannel? _channel;
   String? _token;
   bool _joined = false;
@@ -15,6 +17,7 @@ class ChatService {
       StreamController<Map<String, List<Message>>>.broadcast();
   final _connectionsController =
       StreamController<List<Connection>>.broadcast();
+  final _dialogPeersController = StreamController<List<String>>.broadcast();
   final _joinController = StreamController<UserInfo>.broadcast();
   final _readReceiptController = StreamController<String>.broadcast();
   final _markReadResultController = StreamController<String>.broadcast();
@@ -31,6 +34,7 @@ class ChatService {
   Stream<Map<String, List<Message>>> get historyEvents =>
       _historyController.stream;
   Stream<List<Connection>> get connections => _connectionsController.stream;
+  Stream<List<String>> get dialogPeers => _dialogPeersController.stream;
   Stream<UserInfo> get joinEvents => _joinController.stream;
   Stream<String> get readReceipts => _readReceiptController.stream;
   Stream<String> get markReadResults => _markReadResultController.stream;
@@ -45,15 +49,17 @@ class ChatService {
 
   bool get isConnected => _channel != null && _joined;
 
-  ChatService({required this.wsUrl});
+  ChatService({required this.wsUrl, this.log});
 
   Future<void> connect(String token) async {
     _token = token;
     _joined = false;
+    log?.info('Connecting to chat…', category: 'chat');
     try {
       _channel = WebSocketChannel.connect(Uri.parse(wsUrl));
       await _channel!.ready.timeout(const Duration(seconds: 10));
       _connectionStateController.add(true);
+      log?.debug('Chat WebSocket open', category: 'chat', banner: false);
       _channel!.stream.listen(
         _handleMessage,
         onError: (_) {
@@ -66,9 +72,12 @@ class ChatService {
         },
       );
       _send({'action': 'join', 'session_token': token});
+      log?.debug('Sent join', category: 'chat', banner: false);
     } catch (e) {
       _connectionStateController.add(false);
-      _errorController.add('WebSocket connection failed: $e');
+      final msg = 'WebSocket connection failed: $e';
+      log?.error(msg, category: 'chat');
+      _errorController.add(msg);
     }
   }
 
@@ -116,6 +125,10 @@ class ChatService {
       switch (type) {
         case 'joined':
           _joined = true;
+          log?.info(
+            'Joined as ${json['username']} (${json['connection_number']} connections)',
+            category: 'chat',
+          );
           _joinController.add(UserInfo(
             uuid: json['user_id'] as String,
             username: json['username'] as String,
@@ -139,6 +152,18 @@ class ChatService {
               .toList();
           _connectionsController.add(conns);
           break;
+        case 'dialog_peers':
+          final peers = (json['peer_ids'] as List)
+              .map((id) => id.toString())
+              .where((id) => id.isNotEmpty)
+              .toList();
+          log?.info(
+            'Dialog peers from server (${peers.length})',
+            category: 'chat',
+            banner: false,
+          );
+          _dialogPeersController.add(peers);
+          break;
         case 'read_receipt':
           _readReceiptController.add(json['by_user_id'] as String);
           break;
@@ -148,19 +173,21 @@ class ChatService {
             _markReadResultController.add(withUser);
           }
           break;
-        case 'pong':
-          _pongController.add(null);
-          break;
         case 'groups':
+          log?.debug(
+            'Groups list (${(json['groups'] as List).length})',
+            category: 'group',
+            banner: false,
+          );
           final groups = (json['groups'] as List)
               .map((g) => ChatGroup.fromJson(g as Map<String, dynamic>))
               .toList();
           _groupsController.add(groups);
           break;
         case 'group_created':
-          _groupCreatedController.add(
-            ChatGroup.fromJson(json['group'] as Map<String, dynamic>),
-          );
+          final g = ChatGroup.fromJson(json['group'] as Map<String, dynamic>);
+          log?.info('Group created: ${g.name}', category: 'group');
+          _groupCreatedController.add(g);
           break;
         case 'group_message':
           _groupMessageController.add(GroupMessage.fromJson(
@@ -176,12 +203,23 @@ class ChatService {
             json['group_id'] as String: msgs,
           });
           break;
+        case 'pong':
+          log?.debug('Pong', category: 'chat', banner: false);
+          _pongController.add(null);
+          break;
         case 'error':
-          _errorController.add(json['message'] as String? ?? 'Unknown error');
+          final err = json['message'] as String? ?? 'Unknown error';
+          log?.error(err, category: 'chat');
+          _errorController.add(err);
+          break;
+        default:
+          log?.debug('Event: $type', category: 'chat', banner: false);
           break;
       }
     } catch (e) {
-      _errorController.add('Failed to parse server message: $e');
+      final msg = 'Failed to parse server message: $e';
+      log?.warn(msg, category: 'chat');
+      _errorController.add(msg);
     }
   }
 
@@ -218,6 +256,14 @@ class ChatService {
 
   void listConnections() {
     _send({'action': 'list_connections', 'session_token': _token});
+  }
+
+  void listDialogPeers({int limit = 200}) {
+    _send({
+      'action': 'list_dialog_peers',
+      'session_token': _token,
+      'limit': limit,
+    });
   }
 
   void ping() {
@@ -278,8 +324,23 @@ class ChatService {
     });
   }
 
+  void addGroupMember({
+    required String groupId,
+    required String userId,
+    String role = 'member',
+  }) {
+    _send({
+      'action': 'add_group_member',
+      'session_token': _token,
+      'group_id': groupId,
+      'user_id': userId,
+      'role': role,
+    });
+  }
+
   void disconnect() {
     _joined = false;
+    log?.info('Chat disconnected', category: 'chat');
     _channel?.sink.close();
     _channel = null;
   }
@@ -289,6 +350,7 @@ class ChatService {
     _messageController.close();
     _historyController.close();
     _connectionsController.close();
+    _dialogPeersController.close();
     _joinController.close();
     _readReceiptController.close();
     _markReadResultController.close();

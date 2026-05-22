@@ -14,6 +14,24 @@ struct _MyApplication {
 
 G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
+// Resolved next to the bundle executable: <bundle>/resources/app_icon.png
+static gchar* resolve_app_icon_path() {
+#ifdef __linux__
+  g_autofree gchar* exe_path = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe_path == nullptr) {
+    return nullptr;
+  }
+  g_autofree gchar* bundle_dir = g_path_get_dirname(exe_path);
+  gchar* icon_path =
+      g_build_filename(bundle_dir, "resources", "app_icon.png", nullptr);
+  if (g_file_test(icon_path, G_FILE_TEST_EXISTS)) {
+    return icon_path;
+  }
+  g_free(icon_path);
+#endif
+  return nullptr;
+}
+
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
   gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
@@ -45,14 +63,19 @@ static void my_application_activate(GApplication* application) {
   if (use_header_bar) {
     GtkHeaderBar* header_bar = GTK_HEADER_BAR(gtk_header_bar_new());
     gtk_widget_show(GTK_WIDGET(header_bar));
-    gtk_header_bar_set_title(header_bar, "messenger_client");
+    gtk_header_bar_set_title(header_bar, "Messenger");
     gtk_header_bar_set_show_close_button(header_bar, TRUE);
     gtk_window_set_titlebar(window, GTK_WIDGET(header_bar));
   } else {
-    gtk_window_set_title(window, "messenger_client");
+    gtk_window_set_title(window, "Messenger");
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+
+  g_autofree gchar* icon_path = resolve_app_icon_path();
+  if (icon_path != nullptr) {
+    gtk_window_set_icon_from_file(GTK_WINDOW(window), icon_path, nullptr);
+  }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   fl_dart_project_set_dart_entrypoint_arguments(
@@ -101,10 +124,6 @@ static gboolean my_application_local_command_line(GApplication* application,
 
 // Implements GApplication::startup.
 static void my_application_startup(GApplication* application) {
-  // MyApplication* self = MY_APPLICATION(object);
-
-  // Perform any actions required at application startup.
-
   G_APPLICATION_CLASS(my_application_parent_class)->startup(application);
 }
 

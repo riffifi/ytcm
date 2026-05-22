@@ -3,11 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/app_state.dart';
 import 'services/appearance_preferences.dart';
+import 'services/messenger_log.dart';
 import 'services/notification_preferences.dart';
 import 'services/notification_service.dart';
 import 'services/server_settings.dart';
 import 'screens/auth_screen.dart';
-import 'screens/conversations_screen.dart';
+import 'screens/home_shell.dart';
 import 'theme.dart';
 import 'widgets/app_lifecycle.dart';
 
@@ -25,14 +26,19 @@ class App extends StatelessWidget {
     final serverSettings = ServerSettings();
     final appearance = AppearancePreferences();
     final notificationPrefs = NotificationPreferences();
+    final messengerLog = MessengerLog();
 
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: serverSettings),
         ChangeNotifierProvider.value(value: appearance),
         ChangeNotifierProvider.value(value: notificationPrefs),
+        ChangeNotifierProvider.value(value: messengerLog),
         ChangeNotifierProvider(
-          create: (_) => AppState(serverSettings: serverSettings),
+          create: (_) => AppState(
+            serverSettings: serverSettings,
+            log: messengerLog,
+          ),
         ),
       ],
       child: Consumer<AppearancePreferences>(
@@ -86,11 +92,22 @@ class _Root extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 300),
-      child: state.isLoggedIn
-          ? const ConversationsScreen(key: ValueKey('conversations'))
-          : const AuthScreen(key: ValueKey('auth')),
-    );
+    final c = context.mc;
+
+    if (!state.sessionChecked) {
+      return Scaffold(
+        key: const ValueKey('session-check'),
+        backgroundColor: c.bg,
+        body: Center(
+          child: CircularProgressIndicator(color: c.accent),
+        ),
+      );
+    }
+
+    if (state.isLoggedIn) {
+      return const HomeShell(key: ValueKey('home'));
+    }
+
+    return const AuthScreen(key: ValueKey('auth'));
   }
 }

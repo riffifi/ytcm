@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:provider/provider.dart';
@@ -7,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/messenger_file.dart';
 import '../services/app_state.dart';
 import '../theme.dart';
+import '../utils/chat_image.dart';
 import '../utils/messenger_snackbar.dart';
 
 class FileAttachment extends StatefulWidget {
@@ -25,39 +24,32 @@ class FileAttachment extends StatefulWidget {
 
 class _FileAttachmentState extends State<FileAttachment> {
   bool _loading = false;
-  bool _initialized = false;
   String? _error;
-  DownloadedFile? _downloaded;
+  String? _localPath;
   MessengerFileInfo? _meta;
+  bool _cacheLookupDone = false;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_initialized) return;
-    _initialized = true;
+  void initState() {
+    super.initState();
     _meta = context.read<AppState>().fileMetadata(widget.fileId);
-    _tryLoadCached();
-    context.read<AppState>().prefetchFileMetadata(widget.fileId);
+    _loadCachedPath();
   }
 
-  Future<void> _tryLoadCached() async {
+  Future<void> _loadCachedPath() async {
     final state = context.read<AppState>();
     final meta = _meta ?? state.fileMetadata(widget.fileId);
-    if (meta == null) return;
+    if (meta == null) {
+      state.prefetchFileMetadata(widget.fileId);
+      if (mounted) setState(() => _cacheLookupDone = true);
+      return;
+    }
+    _meta ??= meta;
     final path = await state.cachedFilePath(widget.fileId, meta.filename);
-    if (!mounted || path == null) return;
-    final file = File(path);
-    if (!await file.exists()) return;
-    final bytes = await file.readAsBytes();
     if (!mounted) return;
     setState(() {
-      _downloaded = DownloadedFile(
-        fileId: widget.fileId,
-        filename: meta.filename,
-        mimeType: meta.mimeType,
-        bytes: bytes,
-        localPath: path,
-      );
+      _localPath = path;
+      _cacheLookupDone = true;
     });
   }
 
@@ -72,7 +64,7 @@ class _FileAttachmentState extends State<FileAttachment> {
       final file = await state.downloadFile(widget.fileId);
       if (!mounted) return;
       setState(() {
-        _downloaded = file;
+        _localPath = file.localPath;
         _meta = state.fileMetadata(widget.fileId) ?? _meta;
         _loading = false;
       });
@@ -86,12 +78,11 @@ class _FileAttachmentState extends State<FileAttachment> {
   }
 
   Future<void> _open() async {
-    final path = _downloaded?.localPath;
-    if (path == null) {
+    if (_localPath == null) {
       await _download();
-      if (_downloaded?.localPath == null) return;
+      if (_localPath == null) return;
     }
-    final result = await OpenFilex.open(_downloaded!.localPath);
+    final result = await OpenFilex.open(_localPath!);
     if (!mounted) return;
     if (result.type != ResultType.done) {
       showMessengerSnackBar(
@@ -104,31 +95,31 @@ class _FileAttachmentState extends State<FileAttachment> {
   @override
   Widget build(BuildContext context) {
     final c = context.mc;
-    final meta = _meta ?? context.read<AppState>().fileMetadata(widget.fileId);
+    final meta = _meta;
     final filename = meta?.filename ?? 'Attachment';
-    final isImage = _downloaded?.isImage == true || (meta?.isImage ?? false);
+    final isImage =
+        _localPath != null && (meta?.isImage ?? _looksLikeImage(filename));
 
-    if (_downloaded != null && isImage) {
+    if (isImage && _localPath != null) {
       return GestureDetector(
         onTap: _open,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 260, maxHeight: 220),
-            child: Image.file(
-              File(_downloaded!.localPath),
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _fileTile(c, filename),
-            ),
-          ),
-        ),
+        child: ChatImage.file(_localPath!, c),
       );
     }
 
     return GestureDetector(
-      onTap: _downloaded != null ? _open : _download,
+      onTap: _localPath != null ? _open : _download,
       child: _fileTile(c, filename),
     );
+  }
+
+  bool _looksLikeImage(String filename) {
+    final lower = filename.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp');
   }
 
   Widget _fileTile(AppColors c, String filename) {
@@ -148,7 +139,9 @@ class _FileAttachmentState extends State<FileAttachment> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            _loading ? Icons.hourglass_top : Icons.insert_drive_file_outlined,
+            _loading
+                ? Icons.hourglass_top
+                : Icons.insert_drive_file_outlined,
             color: widget.isMe ? Colors.white70 : c.accent,
             size: 28,
           ),
@@ -170,9 +163,11 @@ class _FileAttachmentState extends State<FileAttachment> {
                 Text(
                   _loading
                       ? 'Downloading…'
-                      : _downloaded != null
+                      : _localPath != null
                           ? 'Tap to open'
-                          : 'Tap to download',
+                          : _cacheLookupDone
+                              ? 'Tap to download'
+                              : 'Loading…',
                   style: TextStyle(
                     color: widget.isMe ? Colors.white60 : c.secondary,
                     fontSize: 11,

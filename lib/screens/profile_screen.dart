@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import '../services/app_state.dart';
 import '../theme.dart';
 import '../utils/messenger_snackbar.dart';
+import '../utils/profile_extras.dart';
+import '../widgets/user_avatar.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -15,21 +17,56 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
+  final _bioCtrl = TextEditingController();
   bool _saving = false;
+  bool _uploadingAvatar = false;
+  String? _avatarFileId;
 
   @override
   void initState() {
     super.initState();
+    _syncFromState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppState>().loadMyProfile();
+    });
+  }
+
+  void _syncFromState() {
     final me = context.read<AppState>().me;
     _firstNameCtrl.text = me?.firstName ?? '';
     _lastNameCtrl.text = me?.lastName ?? '';
+    final extras = ProfileExtras.parse(me?.additionalInfo);
+    _bioCtrl.text = extras.bio ?? '';
+    _avatarFileId = extras.avatarFileId;
   }
 
   @override
   void dispose() {
     _firstNameCtrl.dispose();
     _lastNameCtrl.dispose();
+    _bioCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickAvatar() async {
+    setState(() => _uploadingAvatar = true);
+    final state = context.read<AppState>();
+    final fileId = await state.uploadAvatarImage();
+    if (!mounted) return;
+    setState(() => _uploadingAvatar = false);
+    if (fileId == null) return;
+
+    final ok = await state.updateProfile(
+      firstName: _firstNameCtrl.text.trim(),
+      lastName: _lastNameCtrl.text.trim(),
+      bio: _bioCtrl.text.trim(),
+      avatarFileId: fileId,
+    );
+    if (!mounted) return;
+    if (ok) {
+      setState(() => _avatarFileId = fileId);
+      showMessengerSnackBar(context, 'Avatar updated');
+    }
   }
 
   @override
@@ -37,6 +74,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final c = context.mc;
     final state = context.watch<AppState>();
     final me = state.me;
+    final extras = ProfileExtras.parse(me?.additionalInfo);
+    final avatarId = _avatarFileId ?? extras.avatarFileId;
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -57,30 +96,55 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Center(
             child: Column(
               children: [
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: c.accentSoft,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: c.accent.withOpacity(0.3)),
-                  ),
-                  child: Center(
-                    child: Text(
-                      me?.initials ?? '?',
-                      style: TextStyle(
-                          color: c.accent,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w600),
+                Stack(
+                  alignment: Alignment.bottomRight,
+                  children: [
+                    UserAvatar(
+                      avatarFileId: avatarId,
+                      initials: me?.initials ?? '?',
+                      radius: 40,
                     ),
-                  ),
+                    Material(
+                      color: c.accent,
+                      shape: const CircleBorder(),
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: _uploadingAvatar ? null : _pickAvatar,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: _uploadingAvatar
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.camera_alt_outlined,
+                                  size: 16,
+                                  color: Colors.white,
+                                ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 12),
-                Text('@${me?.username ?? ''}',
-                    style: TextStyle(
-                        color: c.primary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
+                Text(
+                  me?.displayName ?? me?.username ?? '',
+                  style: TextStyle(
+                    color: c.primary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '@${me?.username ?? ''}',
+                  style: TextStyle(color: c.secondary, fontSize: 14),
+                ),
                 const SizedBox(height: 4),
                 Container(
                   padding:
@@ -89,9 +153,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: c.surfaceHigh,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(me?.uuid ?? '',
-                      style: TextStyle(
-                          color: c.secondary, fontSize: 10)),
+                  child: Text(
+                    me?.uuid ?? '',
+                    style: TextStyle(color: c.secondary, fontSize: 10),
+                  ),
                 ),
               ],
             ),
@@ -110,6 +175,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(color: c.primary, fontSize: 15),
             decoration: const InputDecoration(hintText: 'Last name'),
           ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _bioCtrl,
+            maxLines: 4,
+            style: TextStyle(color: c.primary, fontSize: 15),
+            decoration: const InputDecoration(hintText: 'Bio'),
+          ),
           const SizedBox(height: 20),
           _saving
               ? Container(
@@ -123,7 +195,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                 )
@@ -133,6 +207,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     final ok = await state.updateProfile(
                       firstName: _firstNameCtrl.text.trim(),
                       lastName: _lastNameCtrl.text.trim(),
+                      bio: _bioCtrl.text.trim(),
+                      avatarFileId: avatarId,
                     );
                     setState(() => _saving = false);
                     if (!mounted) return;
@@ -213,9 +289,14 @@ class _ActionTile extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 18),
             const SizedBox(width: 12),
-            Text(label,
-                style: TextStyle(
-                    color: color, fontSize: 15, fontWeight: FontWeight.w500)),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
           ],
         ),
       ),

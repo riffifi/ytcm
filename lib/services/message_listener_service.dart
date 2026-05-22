@@ -7,6 +7,8 @@ import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:http/http.dart' as http;
+
 import 'chat_socket_runner.dart';
 import 'conversation_store.dart';
 import 'notification_service.dart';
@@ -135,6 +137,9 @@ void _onStart(ServiceInstance service) async {
   final myUuid = prefs.getString('user_uuid');
   final store = ConversationStore();
   await store.load();
+  final historyPeerIds = ChatSocketRunner.peerIdsFromStore(store, max: 30);
+
+  await _markAuthOnline(prefs, token);
 
   Timer? heartbeat;
   heartbeat = Timer.periodic(const Duration(seconds: 30), (_) async {
@@ -145,23 +150,20 @@ void _onStart(ServiceInstance service) async {
     );
   });
 
-  var attempts = 0;
-  const maxAttempts = 8;
+  var reconnectDelay = const Duration(seconds: 3);
+  final sessionNotified = <String>{};
 
   try {
-    while (!stopping && attempts < maxAttempts) {
+    while (!stopping) {
       final wanted = prefs.getBool(_prefListenerWanted) ?? false;
       if (!wanted) break;
-
-      attempts++;
-      final sessionNotified = <String>{};
 
       try {
         await ChatSocketRunner.listen(
           chatUrl: chatUrl,
           sessionToken: token,
-          historyPeerIds: const [],
-          maxDuration: const Duration(minutes: 25),
+          historyPeerIds: historyPeerIds,
+          maxDuration: const Duration(hours: 12),
           shouldStop: () => stopping,
           onLiveMessage: (msg) async {
             if (stopping) return;
@@ -172,16 +174,20 @@ void _onStart(ServiceInstance service) async {
             final p = await SharedPreferences.getInstance();
             if (p.getBool('app_in_foreground') == true) {
               final active = p.getString('active_chat_peer');
-              if (active == msg.senderId) return;
+              if (active != null &&
+                  active == msg.senderId) {
+                return;
+              }
             }
 
             sessionNotified.add(msg.uuid);
             await MessageListenerService.markNotified(msg.uuid);
 
-            final title = store.nameFor(msg.senderId) ??
-                'User ${msg.senderId.substring(0, 8)}';
+            final peerId = msg.senderId;
+            final title = store.nameFor(peerId) ??
+                'User ${peerId.length >= 8 ? peerId.substring(0, 8) : peerId}';
             await NotificationService.instance.showIncomingMessage(
-              peerId: msg.uuid,
+              peerId: peerId,
               title: title,
               body:
                   msg.previewText.isNotEmpty ? msg.previewText : 'New message',
@@ -194,10 +200,28 @@ void _onStart(ServiceInstance service) async {
       }
 
       if (stopping) break;
-      await Future.delayed(Duration(seconds: 5 * attempts.clamp(1, 4)));
+      if (!(prefs.getBool(_prefListenerWanted) ?? false)) break;
+
+      await Future.delayed(reconnectDelay);
+      reconnectDelay = Duration(
+        seconds: (reconnectDelay.inSeconds * 2).clamp(3, 60),
+      );
+      await _markAuthOnline(prefs, token);
     }
   } finally {
     heartbeat.cancel();
     service.stopSelf();
   }
+}
+
+Future<void> _markAuthOnline(SharedPreferences prefs, String token) async {
+  final authUrl = prefs.getString(ServerEndpoints.prefsKeyAuth)?.trim();
+  if (authUrl == null || authUrl.isEmpty) return;
+  try {
+    await http
+        .get(Uri.parse('$authUrl/online').replace(
+          queryParameters: {'session_tocken': token},
+        ))
+        .timeout(const Duration(seconds: 10));
+  } catch (_) {}
 }

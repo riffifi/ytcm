@@ -10,6 +10,7 @@ import '../services/notification_preferences.dart';
 import '../theme.dart';
 import '../utils/messenger_haptics.dart';
 import '../screens/chat_screen.dart';
+import '../utils/platform_ui.dart';
 
 bool conversationContextMenuIsDesktop(BuildContext context) {
   if (kIsWeb) return false;
@@ -119,10 +120,12 @@ void _handleMenuSelection(
     case 'open':
       messengerHapticLight();
       state.openChat(peer.userId, peer.username);
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const ChatScreen()),
-      );
+      if (!isWideLayout(context)) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ChatScreen()),
+        );
+      }
       break;
     case 'read':
       if (unread > 0) {

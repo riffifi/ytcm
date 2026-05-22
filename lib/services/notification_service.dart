@@ -41,6 +41,13 @@ class NotificationService {
       const InitializationSettings(android: android, iOS: ios),
     );
 
+    if (Platform.isIOS) {
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(alert: true, badge: true, sound: true);
+    }
+
     if (Platform.isAndroid) {
       await _android?.createNotificationChannel(
         const AndroidNotificationChannel(

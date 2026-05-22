@@ -8,12 +8,23 @@ import '../models/models.dart';
 
 /// On-device message history (documents dir). Survives app restarts on mobile.
 class MessageCache {
-  static const _fileName = 'messages_cache.json';
+  static const _legacyFileName = 'messages_cache.json';
   static const maxMessagesPerPeer = 500;
+
+  String? _userId;
+
+  Future<void> setUserScope(String? userId) async {
+    _userId = userId;
+  }
+
+  String _fileName() {
+    if (_userId == null || _userId!.isEmpty) return _legacyFileName;
+    return 'messages_cache_${_userId!}.json';
+  }
 
   Future<File> _file() async {
     final dir = await getApplicationDocumentsDirectory();
-    return File(p.join(dir.path, _fileName));
+    return File(p.join(dir.path, _fileName()));
   }
 
   Future<Map<String, List<Message>>> load() async {
@@ -54,6 +65,7 @@ class MessageCache {
     } catch (_) {}
   }
 
+  /// Removes cached messages for the current account scope only.
   Future<void> clear() async {
     try {
       final file = await _file();

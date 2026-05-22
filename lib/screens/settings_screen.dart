@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import '../models/color_palette.dart';
 import '../services/app_state.dart';
 import '../services/appearance_preferences.dart';
+import '../services/background_messaging.dart';
 import '../services/notification_preferences.dart';
 import '../theme.dart';
+import '../widgets/log_status_bar.dart';
 import 'profile_screen.dart';
 import 'server_settings_screen.dart';
 
@@ -111,16 +113,32 @@ class SettingsScreen extends StatelessWidget {
                   style: TextStyle(color: c.primary, fontSize: 15),
                 ),
                 subtitle: Text(
-                  'Alerts when the app is in the background',
+                  'Keeps a connection while logged in so messages arrive when the app is closed (Android). Disable battery optimization for best results.',
                   style: TextStyle(color: c.secondary, fontSize: 12),
                 ),
                 value: notifPrefs.enabled,
                 activeThumbColor: Colors.white,
                 activeTrackColor: c.accent,
-                onChanged: (v) => notifPrefs.setEnabled(v),
+                onChanged: (v) async {
+                  await notifPrefs.setEnabled(v);
+                  if (v) {
+                    await BackgroundMessaging.ensureRunning();
+                  } else {
+                    await BackgroundMessaging.stop();
+                  }
+                },
               ),
             ),
           ],
+          const SizedBox(height: 24),
+          _SectionLabel('Diagnostics'),
+          const SizedBox(height: 6),
+          Text(
+            'Connection and server messages for troubleshooting.',
+            style: TextStyle(color: c.secondary, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          const LogStatusBar(inScrollView: true),
           const SizedBox(height: 24),
           _SectionLabel('Server'),
           const SizedBox(height: 10),

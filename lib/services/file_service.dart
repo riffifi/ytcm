@@ -53,12 +53,12 @@ class FileService {
         response['message'] as String? ?? 'Failed to list files',
       );
     }
-    final files = (response['files'] as List? ?? [])
+    return (response['files'] as List? ?? [])
         .map((f) => MessengerFileInfo.fromJson(f as Map<String, dynamic>))
         .toList();
-    return files;
   }
 
+  /// One WebSocket, one stream listener for the whole upload (init JSON + binary chunks).
   Future<String> uploadFile({
     required String sessionToken,
     required Uint8List bytes,
@@ -71,69 +71,122 @@ class FileService {
     }
 
     final totalSize = bytes.length;
-    final totalChunks = totalSize == 0
-        ? 1
-        : (totalSize + chunkSize - 1) ~/ chunkSize;
+    final totalChunks =
+        totalSize == 0 ? 1 : (totalSize + chunkSize - 1) ~/ chunkSize;
 
     final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+    late StreamSubscription<dynamic> sub;
+
     try {
       await channel.ready.timeout(const Duration(seconds: 15));
 
-      final initResponse = await _sendAndWaitJson(
-        channel,
-        {
-          'message_type': 'upload',
-          'data': {
-            'session_token': sessionToken,
-            'filename': filename,
-            'mime_type': mimeType,
-            'total_size': totalSize,
-            'chunk_index': 0,
-            'total_chunks': totalChunks,
-          },
+      final completer = Completer<String>();
+      var chunksAcked = 0;
+      var nextChunkToSend = 0;
+      var uploadStarted = false;
+      String? uploadedFileId;
+
+      void sendChunk(int index) {
+        final start = index * chunkSize;
+        final end =
+            (start + chunkSize > totalSize) ? totalSize : start + chunkSize;
+        channel.sink.add(bytes.sublist(start, end));
+      }
+
+      sub = channel.stream.listen(
+        (raw) {
+          if (completer.isCompleted) return;
+          if (raw is! String) return;
+
+          try {
+            final json = jsonDecode(raw) as Map<String, dynamic>;
+
+            if (!uploadStarted) {
+              if (json['success'] != true) {
+                completer.completeError(FileServiceException(
+                  json['message'] as String? ?? 'Upload rejected',
+                ));
+                return;
+              }
+              final fileId = json['file_id'] as String?;
+              if (fileId == null || fileId.isEmpty) {
+                completer.completeError(const FileServiceException(
+                  'Upload started without file_id',
+                ));
+                return;
+              }
+              uploadStarted = true;
+              uploadedFileId = fileId;
+              sendChunk(0);
+              nextChunkToSend = 1;
+              return;
+            }
+
+            if (json['success'] != true) {
+              completer.completeError(FileServiceException(
+                json['message'] as String? ?? 'Chunk upload failed',
+              ));
+              return;
+            }
+
+            chunksAcked++;
+            onProgress?.call(chunksAcked / totalChunks);
+
+            final message = json['message'] as String? ?? '';
+            if (message == 'Upload complete') {
+              completer.complete(uploadedFileId ?? '');
+              return;
+            }
+
+            if (nextChunkToSend < totalChunks) {
+              sendChunk(nextChunkToSend);
+              nextChunkToSend++;
+            }
+          } catch (e) {
+            if (!completer.isCompleted) completer.completeError(e);
+          }
         },
-        timeout: const Duration(seconds: 30),
+        onError: (e) {
+          if (!completer.isCompleted) completer.completeError(e);
+        },
+        onDone: () {
+          if (!completer.isCompleted) {
+            completer.completeError(const FileServiceException(
+              'File connection closed before upload finished',
+            ));
+          }
+        },
+        cancelOnError: true,
       );
 
-      if (initResponse['success'] != true) {
-        throw FileServiceException(
-          initResponse['message'] as String? ?? 'Upload rejected',
-        );
+      channel.sink.add(jsonEncode({
+        'message_type': 'upload',
+        'data': {
+          'session_token': sessionToken,
+          'filename': filename,
+          'mime_type': mimeType,
+          'total_size': totalSize,
+          'chunk_index': 0,
+          'total_chunks': totalChunks,
+        },
+      }));
+
+      final fileId = await completer.future.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () {
+          throw const FileServiceException('Upload timed out');
+        },
+      );
+
+      if (fileId.isEmpty) {
+        throw const FileServiceException('Upload finished without file_id');
       }
-
-      final fileId = initResponse['file_id'] as String?;
-      if (fileId == null || fileId.isEmpty) {
-        throw const FileServiceException('Upload started without file_id');
-      }
-
-      for (var i = 0; i < totalChunks; i++) {
-        final start = i * chunkSize;
-        final end = (start + chunkSize > totalSize) ? totalSize : start + chunkSize;
-        final chunk = bytes.sublist(start, end);
-        channel.sink.add(chunk);
-
-        final chunkResponse = await _waitForJson(
-          channel,
-          timeout: const Duration(minutes: 2),
-        );
-
-        if (chunkResponse['success'] != true) {
-          throw FileServiceException(
-            chunkResponse['message'] as String? ?? 'Chunk upload failed',
-          );
-        }
-
-        onProgress?.call((i + 1) / totalChunks);
-
-        final message = chunkResponse['message'] as String? ?? '';
-        if (message == 'Upload complete') {
-          return fileId;
-        }
-      }
-
-      throw const FileServiceException('Upload finished without confirmation');
+      return fileId;
     } finally {
-      await channel.sink.close();
+      await sub.cancel();
+      try {
+        await channel.sink.close();
+      } catch (_) {}
     }
   }
 
@@ -143,6 +196,8 @@ class FileService {
     void Function(double progress)? onProgress,
   }) async {
     final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
+    late StreamSubscription<dynamic> sub;
+
     try {
       await channel.ready.timeout(const Duration(seconds: 15));
 
@@ -154,22 +209,21 @@ class FileService {
       var receivedChunks = 0;
       var gotMetadata = false;
 
-      late StreamSubscription<dynamic> sub;
       Future<void> finish() async {
         if (completer.isCompleted) return;
         final name = filename ?? fileId;
-        final bytes = buffer.toBytes();
-        if (expectedSize != null && bytes.length != expectedSize) {
+        final fileBytes = buffer.toBytes();
+        if (expectedSize != null && fileBytes.length != expectedSize) {
           completer.completeError(FileServiceException(
-            'Download size mismatch (${bytes.length} vs $expectedSize)',
+            'Download size mismatch (${fileBytes.length} vs $expectedSize)',
           ));
           return;
         }
-        final localPath = await _saveToDisk(fileId, name, bytes);
+        final localPath = await _saveToDisk(fileId, name, fileBytes);
         completer.complete(DownloadedFile(
           fileId: fileId,
           filename: name,
-          bytes: bytes,
+          bytes: fileBytes,
           localPath: localPath,
         ));
       }
@@ -235,11 +289,9 @@ class FileService {
         onTimeout: () {
           throw const FileServiceException('Download timed out');
         },
-      ).whenComplete(() async {
-        await sub.cancel();
-        await channel.sink.close();
-      });
+      );
     } finally {
+      await sub.cancel();
       try {
         await channel.sink.close();
       } catch (_) {}
@@ -271,58 +323,41 @@ class FileService {
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-    try {
-      await channel.ready.timeout(const Duration(seconds: 15));
-      return await _sendAndWaitJson(channel, payload, timeout: timeout);
-    } finally {
-      await channel.sink.close();
-    }
-  }
-
-  Future<Map<String, dynamic>> _sendAndWaitJson(
-    WebSocketChannel channel,
-    Map<String, dynamic> payload, {
-    required Duration timeout,
-  }) async {
-    channel.sink.add(jsonEncode(payload));
-    return _waitForJson(channel, timeout: timeout);
-  }
-
-  Future<Map<String, dynamic>> _waitForJson(
-    WebSocketChannel channel, {
-    required Duration timeout,
-  }) async {
-    final completer = Completer<Map<String, dynamic>>();
     late StreamSubscription<dynamic> sub;
 
-    sub = channel.stream.listen(
-      (raw) {
-        if (raw is String) {
-          try {
-            final json = jsonDecode(raw) as Map<String, dynamic>;
-            if (!completer.isCompleted) completer.complete(json);
-          } catch (e) {
-            if (!completer.isCompleted) completer.completeError(e);
-          }
-        }
-      },
-      onError: (e) {
-        if (!completer.isCompleted) completer.completeError(e);
-      },
-      onDone: () {
-        if (!completer.isCompleted) {
-          completer.completeError(
-            const FileServiceException('Connection closed before response'),
-          );
-        }
-      },
-      cancelOnError: true,
-    );
-
     try {
+      await channel.ready.timeout(const Duration(seconds: 15));
+      final completer = Completer<Map<String, dynamic>>();
+
+      sub = channel.stream.listen(
+        (raw) {
+          if (completer.isCompleted) return;
+          if (raw is String) {
+            try {
+              completer.complete(jsonDecode(raw) as Map<String, dynamic>);
+            } catch (e) {
+              completer.completeError(e);
+            }
+          }
+        },
+        onError: completer.completeError,
+        onDone: () {
+          if (!completer.isCompleted) {
+            completer.completeError(const FileServiceException(
+              'Connection closed before response',
+            ));
+          }
+        },
+        cancelOnError: true,
+      );
+
+      channel.sink.add(jsonEncode(payload));
       return await completer.future.timeout(timeout);
     } finally {
       await sub.cancel();
+      try {
+        await channel.sink.close();
+      } catch (_) {}
     }
   }
 

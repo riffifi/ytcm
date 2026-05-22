@@ -91,6 +91,7 @@ class GroupsScreen extends StatelessWidget {
 
   Future<void> _showCreateGroup(BuildContext context) async {
     final nameCtrl = TextEditingController();
+    final membersCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) {
@@ -98,10 +99,29 @@ class GroupsScreen extends StatelessWidget {
         return AlertDialog(
           backgroundColor: c.surface,
           title: Text('New group', style: TextStyle(color: c.primary)),
-          content: TextField(
-            controller: nameCtrl,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: 'Group name'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: nameCtrl,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Group name',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: membersCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Add members (optional)',
+                    hintText: 'usernames, separated by commas',
+                  ),
+                  maxLines: 2,
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
@@ -117,12 +137,19 @@ class GroupsScreen extends StatelessWidget {
       },
     );
     if (ok != true || !context.mounted) return;
-    final created =
-        await context.read<AppState>().createGroup(nameCtrl.text);
+
+    final state = context.read<AppState>();
+    final result = await state.createGroup(
+      nameCtrl.text,
+      memberUsernames: AppState.parseUsernameList(membersCtrl.text),
+    );
     nameCtrl.dispose();
+    membersCtrl.dispose();
     if (!context.mounted) return;
-    if (!created) {
-      showMessengerSnackBar(context, 'Could not create group');
+    if (!result.ok) {
+      showMessengerSnackBar(context, result.message ?? 'Could not create group');
+    } else if (result.message != null) {
+      showMessengerSnackBar(context, result.message!);
     } else {
       showMessengerSnackBar(context, 'Group created');
     }

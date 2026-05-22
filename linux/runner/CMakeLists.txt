@@ -24,3 +24,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
+
+# Window / launcher icon (pixel-art tree).
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.png"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+  COMPONENT Runtime)

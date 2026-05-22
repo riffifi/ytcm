@@ -8,7 +8,9 @@ import '../models/models.dart';
 import '../models/group_models.dart';
 import '../models/messenger_file.dart';
 import '../services/auth_service.dart';
+import '../services/background_messaging.dart';
 import '../services/background_sync.dart';
+import '../services/notification_preferences.dart';
 import '../services/chat_service.dart';
 import '../services/file_metadata_cache.dart';
 import '../services/file_service.dart';
@@ -17,20 +19,26 @@ import '../services/conversation_store.dart';
 import '../services/message_cache.dart';
 import '../services/notification_service.dart';
 import '../services/server_settings.dart';
+import '../utils/file_limits.dart';
+import '../utils/profile_extras.dart';
+import 'messenger_log.dart';
 
 class AppState extends ChangeNotifier {
   AuthService auth;
   ChatService chat;
   FileService file;
   final ServerSettings serverSettings;
+  final MessengerLog log;
   final ConversationStore _conversationStore = ConversationStore();
   final MessageCache _messageCache = MessageCache();
   final FileMetadataCache _fileMetadataCache = FileMetadataCache();
   Timer? _persistDebounce;
+  Timer? _presenceTimer;
 
   String? _token;
   UserInfo? _me;
   bool _loading = false;
+  bool _sessionChecked = false;
   String? _error;
   String? _chatStatus;
 
@@ -38,6 +46,8 @@ class AppState extends ChangeNotifier {
   final Map<String, List<GroupMessage>> _groupConversations = {};
   final List<ChatGroup> _groups = [];
   List<Connection> _contacts = [];
+  final Map<String, UserInfo> _peerProfiles = {};
+  final Set<String> _onlinePeerIds = {};
   String? _activeChatUserId;
   String? _activeChatUsername;
   String? _activeGroupId;
@@ -54,10 +64,12 @@ class AppState extends ChangeNotifier {
   StreamSubscription<GroupMessage>? _groupMsgSub;
   StreamSubscription<Map<String, List<GroupMessage>>>? _groupHistorySub;
   StreamSubscription<ChatGroup>? _groupCreatedSub;
+  StreamSubscription<List<String>>? _dialogPeersSub;
 
   String? get token => _token;
   UserInfo? get me => _me;
   bool get loading => _loading;
+  bool get sessionChecked => _sessionChecked;
   String? get error => _error;
   String? get chatStatus => _chatStatus;
   Map<String, List<Message>> get conversations => _conversations;
@@ -82,7 +94,9 @@ class AppState extends ChangeNotifier {
             (c) => c!.uuid == id,
             orElse: () => null,
           );
-      final username = fromContact?.username ??
+      final profile = _peerProfiles[id];
+      final username = profile?.username ??
+          fromContact?.username ??
           _conversationStore.nameFor(id) ??
           _shortPeerLabel(id);
       return ConversationPeer(userId: id, username: username);
@@ -101,22 +115,41 @@ class AppState extends ChangeNotifier {
     return peers;
   }
 
-  AppState({required this.serverSettings})
+  AppState({required this.serverSettings, required this.log})
       : auth = AuthService(baseUrl: serverSettings.authUrl),
-        chat = ChatService(wsUrl: serverSettings.chatUrl),
+        chat = ChatService(
+          wsUrl: serverSettings.chatUrl,
+          log: log,
+        ),
         file = FileService(wsUrl: serverSettings.fileUrl) {
+    log.info('App started', category: 'app', banner: false);
     _init();
   }
 
   void _rebuildServices() {
     auth = AuthService(baseUrl: serverSettings.authUrl);
-    chat = ChatService(wsUrl: serverSettings.chatUrl);
+    chat = ChatService(wsUrl: serverSettings.chatUrl, log: log);
     file = FileService(wsUrl: serverSettings.fileUrl);
+    log.info('Server endpoints updated', category: 'app');
+  }
+
+  void _setStatus(String message, {String category = 'app'}) {
+    _chatStatus = message;
+    log.info(message, category: category);
+    notifyListeners();
+  }
+
+  void _setError(String message, {String category = 'app'}) {
+    _error = message;
+    _chatStatus = message;
+    log.error(message, category: category);
+    notifyListeners();
   }
 
   MessengerFileInfo? fileMetadata(String fileId) => _fileMetadataCache.get(fileId);
 
   Future<void> reconnectWithNewSettings() async {
+    log.info('Applying new server settings…', category: 'app');
     await _cancelChatSubscriptions();
     chat.disconnect();
     _conversations.clear();
@@ -134,30 +167,34 @@ class AppState extends ChangeNotifier {
     final info = await auth.getSessionInfo(_token!);
     if (info != null) {
       _me = info;
+      await _applyAccountStorage(info.uuid);
       await _connectChat();
     } else {
       _token = null;
       _me = null;
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('session_token');
-      _conversationStore.clear();
-      await _conversationStore.save();
+      await _conversationStore.setUserScope(null);
+      await _messageCache.setUserScope(null);
     }
     notifyListeners();
   }
 
   Future<void> _init() async {
-    await serverSettings.ensureLoaded();
-    _rebuildServices();
-    await _conversationStore.load();
-    await _fileMetadataCache.load();
-    final cachedMessages = await _messageCache.load();
-    _conversations.addAll(cachedMessages);
+    try {
+      await serverSettings.ensureLoaded();
+      _rebuildServices();
+      await _fileMetadataCache.load();
 
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString('session_token');
-    if (saved != null) {
-      await _restoreSession(saved);
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString('session_token');
+      if (saved != null) {
+        log.info('Restoring saved session…', category: 'auth', banner: false);
+        await _restoreSession(saved);
+      }
+    } finally {
+      _sessionChecked = true;
+      notifyListeners();
     }
   }
 
@@ -168,6 +205,8 @@ class AppState extends ChangeNotifier {
       _me = info;
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user_uuid', info.uuid);
+      await _applyAccountStorage(info.uuid);
+      await loadMyProfile();
       await _connectChat();
       await _registerBackgroundTasks();
       notifyListeners();
@@ -191,27 +230,32 @@ class AppState extends ChangeNotifier {
 
     if (token == null) {
       _loading = false;
-      _error =
-          'Could not sign in. Check credentials and server URL in settings.';
-      notifyListeners();
+      _loading = false;
+      _setError(
+        'Could not sign in. Check credentials and server URL in settings.',
+        category: 'auth',
+      );
       return false;
     }
 
     final info = await auth.getSessionInfo(token);
     if (info == null) {
       _loading = false;
-      _error = 'Session error — auth server may be unreachable.';
-      notifyListeners();
+      _setError('Session error — auth server may be unreachable.',
+          category: 'auth');
       return false;
     }
 
     _token = token;
     _me = info;
+    log.info('Signed in as ${info.username}', category: 'auth');
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('session_token', token);
     await prefs.setString('user_uuid', info.uuid);
 
+    await _applyAccountStorage(info.uuid);
+    await loadMyProfile();
     await _connectChat();
     await _registerBackgroundTasks();
     _loading = false;
@@ -222,7 +266,9 @@ class AppState extends ChangeNotifier {
   Future<void> _registerBackgroundTasks() async {
     if (!serverSettings.isConfigured) return;
     await MessageListenerService.configure();
-    if (BackgroundSync.isSupported) await BackgroundSync.register();
+    if (BackgroundSync.isSupported) {
+      await BackgroundSync.register();
+    }
   }
 
   /// Drop the UI WebSocket so the background listener owns the server connection.
@@ -230,8 +276,7 @@ class AppState extends ChangeNotifier {
     if (_token == null) return;
     await _cancelChatSubscriptions();
     chat.disconnect();
-    _chatStatus = 'Background listener active';
-    notifyListeners();
+    _setStatus('Background listener active', category: 'chat');
   }
 
   /// Called when the app returns to the foreground.
@@ -268,7 +313,10 @@ class AppState extends ChangeNotifier {
 
     _loading = false;
     if (!ok) {
-      _error = 'Registration failed — check server URL in settings.';
+      _setError('Registration failed — check server URL in settings.',
+          category: 'auth');
+    } else {
+      log.info('Registration successful', category: 'auth');
     }
     notifyListeners();
     return ok;
@@ -277,12 +325,16 @@ class AppState extends ChangeNotifier {
   Future<void> _connectChat() async {
     if (_token == null) return;
     if (!serverSettings.isConfigured) {
-      _chatStatus =
-          'Set auth, chat, and file URLs in Profile → Server settings';
-      notifyListeners();
+      _setStatus(
+        'Set auth, chat, and file URLs in Profile → Server settings',
+      );
       return;
     }
+    log.info('Connecting chat session…', category: 'chat');
     await _cancelChatSubscriptions();
+
+    // Let the UI socket own join/sync (background listener would consume offline mail).
+    await BackgroundMessaging.stop();
 
     await auth.setOnline(_token!);
     await chat.connect(_token!);
@@ -290,22 +342,23 @@ class AppState extends ChangeNotifier {
     _msgSub = chat.messages.listen(_onMessage);
     _historySub = chat.historyEvents.listen(_onHistory);
     _connectionsSub = chat.connections.listen(_onConnections);
+    _dialogPeersSub = chat.dialogPeers.listen(_onDialogPeers);
     _readSub = chat.readReceipts.listen(_onReadReceipt);
     _markReadSub = chat.markReadResults.listen(_onMarkReadResult);
     _errorSub = chat.errors.listen((msg) {
       final text = msg.trim();
-      if (text.isNotEmpty) {
-        _chatStatus = text;
-        notifyListeners();
-      }
+      if (text.isNotEmpty) _setError(text, category: 'chat');
     });
     _joinSub = chat.joinEvents.listen((info) {
-      _chatStatus = 'Connected';
+      _setStatus('Connected', category: 'chat');
       _rememberPeer(info.uuid, info.username);
       _migrateStoredPeerKeys();
+      _indexPeersFromCachedMessages();
       _loadPersistedConversations();
       chat.listConnections();
       chat.listGroups();
+      _scheduleServerSync();
+      _scheduleProfilePrefetch();
       notifyListeners();
     });
 
@@ -321,22 +374,155 @@ class AppState extends ChangeNotifier {
     });
 
     _migrateStoredPeerKeys();
+    _indexPeersFromCachedMessages();
     _loadPersistedConversations();
+    _scheduleServerSync();
 
     Future.delayed(const Duration(milliseconds: 800), () {
       if (chat.isConnected) chat.listConnections();
     });
+
+    _startPresencePolling();
   }
 
-  void _loadPersistedConversations() {
-    for (final entry in _conversationStore.peerNames.entries) {
-      if (!_conversations.containsKey(entry.key)) {
-        chat.requestHistory(entry.key);
+  void _startPresencePolling() {
+    _presenceTimer?.cancel();
+    _presenceTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (chat.isConnected) chat.listConnections();
+    });
+  }
+
+  void _stopPresencePolling() {
+    _presenceTimer?.cancel();
+    _presenceTimer = null;
+  }
+
+  void _scheduleServerSync() {
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (chat.isConnected) _syncAllConversationsFromServer();
+    });
+    Future.delayed(const Duration(milliseconds: 2000), () {
+      if (chat.isConnected) {
+        _indexPeersFromCachedMessages();
+        _syncAllConversationsFromServer();
+      }
+    });
+    Future.delayed(const Duration(seconds: 5), () {
+      if (chat.isConnected) {
+        _indexPeersFromCachedMessages();
+        _loadPersistedConversations();
+        notifyListeners();
+      }
+    });
+  }
+
+  /// Pull history for every known peer (store, cache, contacts, live chats).
+  void _syncAllConversationsFromServer() {
+    if (!chat.isConnected) return;
+    final meId = _me?.uuid;
+    if (meId == null) return;
+
+    final peers = <String>{
+      ..._conversationStore.peerNames.keys,
+      ..._conversations.keys,
+      ..._contacts.map((c) => c.uuid),
+    };
+
+    for (final id in peers) {
+      final peerId = _canonicalPeerId(id);
+      if (peerId == meId) continue;
+      _conversations.putIfAbsent(peerId, () => []);
+      chat.requestHistory(peerId);
+    }
+    _conversationStore.save();
+    notifyListeners();
+  }
+
+  void _onDialogPeers(List<String> peerIds) {
+    if (peerIds.isEmpty) return;
+    final meId = _me?.uuid;
+    if (meId == null) return;
+
+    log.info(
+      'Syncing ${peerIds.length} dialog(s) from server',
+      category: 'chat',
+      banner: false,
+    );
+
+    for (final raw in peerIds) {
+      final peerId = _canonicalPeerId(raw);
+      if (peerId == meId) continue;
+      _conversations.putIfAbsent(peerId, () => []);
+      _rememberPeer(peerId, _nameForPeer(peerId));
+      chat.requestHistory(peerId);
+    }
+    _conversationStore.save();
+    notifyListeners();
+  }
+
+  void _indexPeersFromCachedMessages() {
+    final meId = _me?.uuid;
+    for (final entry in _conversations.entries) {
+      final peerId = _canonicalPeerId(entry.key);
+      if (peerId.isNotEmpty) {
+        _rememberPeer(peerId, _nameForPeer(peerId));
+      }
+      for (final m in entry.value) {
+        final other = meId != null && m.senderId == meId
+            ? m.receiverId
+            : m.senderId;
+        if (other.isEmpty || other == meId) continue;
+        _rememberPeer(_canonicalPeerId(other), _nameForPeer(other));
       }
     }
   }
 
+  Future<void> _applyAccountStorage(String userId) async {
+    await _conversationStore.setUserScope(userId);
+    await _messageCache.setUserScope(userId);
+    _conversations.clear();
+    _conversations.addAll(await _messageCache.load());
+    _indexPeersFromCachedMessages();
+    final peerCount = _conversationStore.peerNames.length;
+    log.info(
+      'Loaded ${_conversations.length} cached thread(s), $peerCount saved peer(s)',
+      category: 'app',
+      banner: false,
+    );
+    notifyListeners();
+    _scheduleProfilePrefetch();
+  }
+
+  Future<void> loadMyProfile() async {
+    if (_token == null || _me == null) return;
+    final profile = await auth.fetchUserProfile(
+      token: _token!,
+      username: _me!.username,
+      uuid: _me!.uuid,
+    );
+    if (profile != null) {
+      _me = profile;
+      notifyListeners();
+    }
+  }
+
+  void _loadPersistedConversations() {
+    if (!chat.isConnected) return;
+    final meId = _me?.uuid;
+    final peers = <String>{
+      ..._conversationStore.peerNames.keys,
+      ..._conversations.keys,
+    };
+    for (final id in peers) {
+      final peerId = _canonicalPeerId(id);
+      if (peerId.isEmpty || peerId == meId) continue;
+      _conversations.putIfAbsent(peerId, () => []);
+      chat.requestHistory(peerId);
+    }
+  }
+
   Future<void> _cancelChatSubscriptions() async {
+    _stopPresencePolling();
     await _msgSub?.cancel();
     await _historySub?.cancel();
     await _connectionsSub?.cancel();
@@ -348,6 +534,7 @@ class AppState extends ChangeNotifier {
     await _groupMsgSub?.cancel();
     await _groupHistorySub?.cancel();
     await _groupCreatedSub?.cancel();
+    await _dialogPeersSub?.cancel();
     _msgSub = null;
     _historySub = null;
     _connectionsSub = null;
@@ -359,6 +546,7 @@ class AppState extends ChangeNotifier {
     _groupMsgSub = null;
     _groupHistorySub = null;
     _groupCreatedSub = null;
+    _dialogPeersSub = null;
   }
 
   void _onGroups(List<ChatGroup> groups) {
@@ -417,12 +605,127 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> createGroup(String name, {List<String> memberIds = const []}) async {
-    if (!chat.isConnected) return false;
+  /// Splits comma/semicolon/newline-separated usernames.
+  static List<String> parseUsernameList(String raw) {
+    return raw
+        .split(RegExp(r'[,;\n]+'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  Future<({String userId, String username})?> _resolveUsername(
+    String query,
+  ) async {
+    final peer = await resolvePeer(query);
+    if (peer == null) return null;
+    return (userId: peer.peerId, username: peer.username);
+  }
+
+  /// Adds a member to the active group. [username] is resolved via auth (not UUID).
+  Future<String?> addGroupMemberByUsername(String username) async {
+    if (_activeGroupId == null) return 'Open a group first';
+    if (_token == null) return 'Not signed in';
+    if (!chat.isConnected) return 'Waiting for chat connection…';
+
+    final trimmed = _normalizeQuery(username);
+    if (trimmed.isEmpty) return 'Enter a username';
+
+    final resolved = await _resolveUsername(trimmed);
+    if (resolved == null) {
+      return lastPeerLookupError ?? 'User "$trimmed" not found';
+    }
+    if (resolved.userId == _me?.uuid) {
+      return 'You are already in this group';
+    }
+
+    chat.addGroupMember(groupId: _activeGroupId!, userId: resolved.userId);
+    _rememberPeer(resolved.userId, resolved.username);
+    log.info('Added ${resolved.username} to group', category: 'group');
+    _setStatus('Added ${resolved.username} to group', category: 'group');
+    return null;
+  }
+
+  /// Creates a group; [memberUsernames] are resolved to UUIDs before create.
+  Future<({bool ok, String? message})> createGroup(
+    String name, {
+    List<String> memberUsernames = const [],
+  }) async {
+    if (!chat.isConnected) {
+      return (ok: false, message: 'Waiting for chat connection…');
+    }
     final trimmed = name.trim();
-    if (trimmed.isEmpty) return false;
+    if (trimmed.isEmpty) {
+      return (ok: false, message: 'Enter a group name');
+    }
+
+    final memberIds = <String>[];
+    final failed = <String>[];
+    for (final raw in memberUsernames) {
+      final u = _normalizeQuery(raw);
+      if (u.isEmpty) continue;
+      final resolved = await _resolveUsername(u);
+      if (resolved == null) {
+        failed.add(u);
+        continue;
+      }
+      if (resolved.userId == _me?.uuid) continue;
+      if (!memberIds.contains(resolved.userId)) {
+        memberIds.add(resolved.userId);
+        _rememberPeer(resolved.userId, resolved.username);
+      }
+    }
+
     chat.createGroup(name: trimmed, memberIds: memberIds);
-    return true;
+    log.info('Creating group "$trimmed" (${memberIds.length} members)',
+        category: 'group');
+
+    if (failed.isNotEmpty) {
+      return (
+        ok: true,
+        message:
+            'Group created. Could not find: ${failed.map((u) => '"$u"').join(', ')}',
+      );
+    }
+    return (ok: true, message: null);
+  }
+
+  Future<({Uint8List bytes, String filename, String mimeType})?>
+      pickFileForUpload() async {
+    final pick = await FilePicker.platform.pickFiles(withData: true);
+    if (pick == null || pick.files.isEmpty) return null;
+
+    final platformFile = pick.files.first;
+    final bytes = platformFile.bytes;
+    if (bytes == null || bytes.isEmpty) {
+      _setError('Could not read the selected file', category: 'file');
+      return null;
+    }
+
+    final filename = platformFile.name.isNotEmpty
+        ? platformFile.name
+        : 'file_${DateTime.now().millisecondsSinceEpoch}';
+    var mimeType = lookupMimeType(filename);
+    if (mimeType == null && platformFile.extension != null) {
+      mimeType = 'application/${platformFile.extension}';
+    }
+    mimeType ??= 'application/octet-stream';
+
+    final limitError = FileLimits.validateUpload(
+      sizeBytes: bytes.length,
+      filename: filename,
+      mimeType: mimeType,
+    );
+    if (limitError != null) {
+      _setError(limitError, category: 'file');
+      return null;
+    }
+
+    return (
+      bytes: Uint8List.fromList(bytes),
+      filename: filename,
+      mimeType: mimeType,
+    );
   }
 
   void sendGroupMessage(String text) {
@@ -449,37 +752,28 @@ class AppState extends ChangeNotifier {
     if (_activeGroupId == null || _token == null) return false;
     if (!serverSettings.isConfigured || !chat.isConnected) return false;
 
-    final pick = await FilePicker.platform.pickFiles(withData: true);
-    if (pick == null || pick.files.isEmpty) return false;
-    final platformFile = pick.files.first;
-    final bytes = platformFile.bytes;
-    if (bytes == null || bytes.isEmpty) return false;
-
-    final filename = platformFile.name.isNotEmpty
-        ? platformFile.name
-        : 'file_${DateTime.now().millisecondsSinceEpoch}';
-    var mimeType = lookupMimeType(filename);
-    if (mimeType == null && platformFile.extension != null) {
-      mimeType = 'application/${platformFile.extension}';
-    }
-    mimeType ??= 'application/octet-stream';
+    final picked = await pickFileForUpload();
+    if (picked == null) return false;
 
     _loading = true;
+    _error = null;
+    log.info('Uploading ${picked.filename} to group…', category: 'file');
     notifyListeners();
     try {
       final fileId = await file.uploadFile(
         sessionToken: _token!,
-        bytes: Uint8List.fromList(bytes),
-        filename: filename,
-        mimeType: mimeType,
+        bytes: picked.bytes,
+        filename: picked.filename,
+        mimeType: picked.mimeType,
       );
+      log.info('Group file uploaded ($fileId)', category: 'file');
       await _fileMetadataCache.put(MessengerFileInfo(
         fileId: fileId,
-        filename: filename,
-        originalSize: bytes.length,
-        storedSize: bytes.length,
+        filename: picked.filename,
+        originalSize: picked.bytes.length,
+        storedSize: picked.bytes.length,
         isCompressed: false,
-        mimeType: mimeType,
+        mimeType: picked.mimeType,
       ));
       final groupId = _activeGroupId!;
       final meId = _me!.uuid;
@@ -495,8 +789,11 @@ class AppState extends ChangeNotifier {
       _onGroupMessage(optimistic);
       chat.sendGroupMessage(groupId: groupId, fileId: fileId);
       return true;
+    } on FileServiceException catch (e) {
+      _setError(e.message, category: 'file');
+      return false;
     } catch (e) {
-      _error = e.toString();
+      _setError('Upload failed: $e', category: 'file');
       return false;
     } finally {
       _loading = false;
@@ -603,9 +900,8 @@ class AppState extends ChangeNotifier {
   void _onHistory(Map<String, List<Message>> event) {
     event.forEach((userId, msgs) {
       final peerId = _canonicalPeerId(userId);
-      if (msgs.isNotEmpty) {
-        _rememberPeer(peerId, _nameForPeer(peerId));
-      }
+      _rememberPeer(peerId, _nameForPeer(peerId));
+      _conversations.putIfAbsent(peerId, () => []);
       _mergeConversation(peerId, msgs);
     });
     final active = _activeChatUserId;
@@ -613,17 +909,22 @@ class AppState extends ChangeNotifier {
       _markIncomingRead(active);
     }
     _schedulePersist();
+    _scheduleProfilePrefetch();
     notifyListeners();
   }
 
   void _onConnections(List<Connection> conns) {
     _contacts = conns.where((c) => c.uuid != _me?.uuid).toList();
+    _onlinePeerIds
+      ..clear()
+      ..addAll(_contacts.map((c) => c.uuid));
     for (final c in _contacts) {
       _rememberPeer(c.uuid, c.username);
       if (!_conversations.containsKey(c.uuid)) {
         chat.requestHistory(c.uuid);
       }
     }
+    _scheduleProfilePrefetch();
     notifyListeners();
   }
 
@@ -905,7 +1206,141 @@ class AppState extends ChangeNotifier {
     chat.requestHistory(peerId);
     _markIncomingRead(peerId);
     chat.markRead(peerId);
+    unawaited(refreshPeerProfile(peerId));
     notifyListeners();
+  }
+
+  UserInfo? peerProfile(String peerId) => _peerProfiles[_canonicalPeerId(peerId)];
+
+  String peerUsername(String peerId) {
+    final id = _canonicalPeerId(peerId);
+    return _peerProfiles[id]?.username ??
+        _conversationStore.nameFor(id) ??
+        _contacts
+            .cast<Connection?>()
+            .firstWhere((c) => c!.uuid == id, orElse: () => null)
+            ?.username ??
+        _shortPeerLabel(id);
+  }
+
+  String peerDisplayName(String peerId) {
+    final id = _canonicalPeerId(peerId);
+    return _peerProfiles[id]?.displayName ?? peerUsername(id);
+  }
+
+  ProfileExtras peerExtras(String peerId) =>
+      ProfileExtras.parse(peerProfile(peerId)?.additionalInfo);
+
+  bool isPeerOnline(String peerId) =>
+      _onlinePeerIds.contains(_canonicalPeerId(peerId));
+
+  String? _authLookupUsername(String peerId) {
+    final id = _canonicalPeerId(peerId);
+    final stored = _conversationStore.nameFor(id);
+    if (stored != null &&
+        stored.isNotEmpty &&
+        !_looksLikeUuid(stored) &&
+        stored != id) {
+      return stored;
+    }
+    for (final c in _contacts) {
+      if (c.uuid == id && c.username.isNotEmpty) return c.username;
+    }
+    final cached = _peerProfiles[id]?.username;
+    if (cached != null &&
+        cached.isNotEmpty &&
+        !_looksLikeUuid(cached) &&
+        cached != id) {
+      return cached;
+    }
+    if (!_looksLikeUuid(id)) return id;
+    return null;
+  }
+
+  void _setPeerProfileFallback(String peerId, {String? username}) {
+    final id = _canonicalPeerId(peerId);
+    final name = username ?? peerUsername(id);
+    _peerProfiles[id] = UserInfo(uuid: id, username: name);
+    if (!_looksLikeUuid(name)) {
+      _rememberPeer(id, name);
+    }
+  }
+
+  Future<void> refreshPeerProfile(String peerId) async {
+    if (_token == null) return;
+    final canonical = _canonicalPeerId(peerId);
+
+    var lookupName = _authLookupUsername(canonical);
+    String resolvedUuid = canonical;
+
+    if (lookupName == null && _looksLikeUuid(canonical)) {
+      final identity = await auth.resolvePeerIdentity(
+        token: _token!,
+        query: canonical,
+      );
+      if (identity != null) {
+        resolvedUuid = identity.uuid;
+        if (!_looksLikeUuid(identity.username)) {
+          lookupName = identity.username;
+          _rememberPeer(resolvedUuid, identity.username);
+        }
+      }
+    }
+
+    if (lookupName == null) {
+      _setPeerProfileFallback(canonical);
+      notifyListeners();
+      return;
+    }
+
+    final profile = await auth.fetchUserProfile(
+      token: _token!,
+      username: lookupName,
+      uuid: _looksLikeUuid(resolvedUuid) ? resolvedUuid : null,
+    );
+
+    if (profile == null) {
+      _setPeerProfileFallback(resolvedUuid, username: lookupName);
+      notifyListeners();
+      return;
+    }
+
+    final storeId = _looksLikeUuid(canonical) ? canonical : resolvedUuid;
+    final prev = _peerProfiles[storeId];
+    _peerProfiles[storeId] = profile;
+    _rememberPeer(storeId, profile.username);
+
+    if (prev != null &&
+        (prev.firstName != profile.firstName ||
+            prev.lastName != profile.lastName ||
+            prev.additionalInfo != profile.additionalInfo)) {
+      log.info('Profile updated for ${profile.username}', category: 'auth');
+    }
+    notifyListeners();
+  }
+
+  /// Loads names/avatars for conversation list (throttled).
+  Future<void> prefetchPeerProfiles(Iterable<String> peerIds) async {
+    if (_token == null) return;
+    for (final raw in peerIds) {
+      final id = _canonicalPeerId(raw);
+      if (id.isEmpty || id == _me?.uuid) continue;
+      final cached = _peerProfiles[id];
+      if (cached != null &&
+          (cached.firstName != null ||
+              cached.lastName != null ||
+              cached.additionalInfo != null)) {
+        continue;
+      }
+      await refreshPeerProfile(id);
+      await Future.delayed(const Duration(milliseconds: 80));
+    }
+  }
+
+  void _scheduleProfilePrefetch() {
+    final ids = conversationPeers.map((p) => p.userId).toList();
+    if (ids.isEmpty) return;
+    unawaited(prefetchPeerProfiles(ids));
   }
 
   void closeChat() {
@@ -924,8 +1359,7 @@ class AppState extends ChangeNotifier {
   void sendMessage(String text) {
     if (_activeChatUserId == null || text.trim().isEmpty) return;
     if (!chat.isConnected) {
-      _chatStatus = 'Waiting for chat connection…';
-      notifyListeners();
+      _setStatus('Waiting for chat connection…', category: 'chat');
       return;
     }
     final trimmed = text.trim();
@@ -957,54 +1391,38 @@ class AppState extends ChangeNotifier {
   Future<bool> sendFileAttachment({String? caption}) async {
     if (_activeChatUserId == null || _token == null) return false;
     if (!serverSettings.isConfigured) {
-      _error = 'Set auth, chat, and file URLs in Server settings';
-      notifyListeners();
+      _setError('Set auth, chat, and file URLs in Server settings');
       return false;
     }
     if (!chat.isConnected) {
-      _chatStatus = 'Waiting for chat connection…';
-      notifyListeners();
+      _setStatus('Waiting for chat connection…', category: 'chat');
       return false;
     }
 
-    final pick = await FilePicker.platform.pickFiles(withData: true);
-    if (pick == null || pick.files.isEmpty) return false;
-    final platformFile = pick.files.first;
-    final bytes = platformFile.bytes;
-    if (bytes == null || bytes.isEmpty) {
-      _error = 'Could not read the selected file';
-      notifyListeners();
-      return false;
-    }
-
-    final filename = platformFile.name.isNotEmpty
-        ? platformFile.name
-        : 'file_${DateTime.now().millisecondsSinceEpoch}';
-    var mimeType = lookupMimeType(filename);
-    if (mimeType == null && platformFile.extension != null) {
-      mimeType = 'application/${platformFile.extension}';
-    }
-    mimeType ??= 'application/octet-stream';
+    final picked = await pickFileForUpload();
+    if (picked == null) return false;
 
     _loading = true;
     _error = null;
+    log.info('Uploading ${picked.filename}…', category: 'file');
     notifyListeners();
 
     try {
       final fileId = await file.uploadFile(
         sessionToken: _token!,
-        bytes: Uint8List.fromList(bytes),
-        filename: filename,
-        mimeType: mimeType,
+        bytes: picked.bytes,
+        filename: picked.filename,
+        mimeType: picked.mimeType,
       );
+      log.info('Uploaded ${picked.filename}', category: 'file');
 
       final info = MessengerFileInfo(
         fileId: fileId,
-        filename: filename,
-        originalSize: bytes.length,
-        storedSize: bytes.length,
+        filename: picked.filename,
+        originalSize: picked.bytes.length,
+        storedSize: picked.bytes.length,
         isCompressed: false,
-        mimeType: mimeType,
+        mimeType: picked.mimeType,
       );
       await _fileMetadataCache.put(info);
 
@@ -1033,10 +1451,10 @@ class AppState extends ChangeNotifier {
       );
       return true;
     } on FileServiceException catch (e) {
-      _error = e.message;
+      _setError(e.message, category: 'file');
       return false;
     } catch (e) {
-      _error = 'Upload failed: $e';
+      _setError('Upload failed: $e', category: 'file');
       return false;
     } finally {
       _loading = false;
@@ -1070,13 +1488,20 @@ class AppState extends ChangeNotifier {
       FileService.cachedPath(fileId, filename);
 
   Future<void> prefetchFileMetadata(String fileId) async {
-    if (_fileMetadataCache.get(fileId) != null || _token == null) return;
+    await ensureFileMetadata(fileId);
+  }
+
+  Future<MessengerFileInfo?> ensureFileMetadata(String fileId) async {
+    final cached = _fileMetadataCache.get(fileId);
+    if (cached != null) return cached;
+    if (_token == null) return null;
     try {
       final files = await file.listFiles(_token!);
       for (final f in files) {
         await _fileMetadataCache.put(f);
       }
     } catch (_) {}
+    return _fileMetadataCache.get(fileId);
   }
 
   Future<String> pingFileReachability() => file.pingReachability();
@@ -1114,25 +1539,65 @@ class AppState extends ChangeNotifier {
   Future<bool> updateProfile({
     required String firstName,
     required String lastName,
+    String? bio,
+    String? avatarFileId,
   }) async {
     if (_token == null) return false;
     final fnOk = await auth.changeFirstName(_token!, firstName);
     final lnOk = await auth.changeLastName(_token!, lastName);
-    if (!fnOk && !lnOk) return false;
 
-    final info = await auth.getSessionInfo(_token!);
-    if (info != null) {
-      _me = UserInfo(
-        uuid: info.uuid,
-        username: info.username,
-        firstName: firstName.isNotEmpty ? firstName : info.firstName,
-        lastName: lastName.isNotEmpty ? lastName : info.lastName,
-        dateOfBirth: info.dateOfBirth,
-        additionalInfo: info.additionalInfo,
+    final extras = ProfileExtras.parse(_me?.additionalInfo);
+    final serialized = ProfileExtras(
+      bio: bio ?? extras.bio,
+      avatarFileId: avatarFileId ?? extras.avatarFileId,
+    ).serialize();
+    var extrasOk = true;
+    if (serialized != (_me?.additionalInfo ?? '')) {
+      extrasOk = await auth.changeAdditionalInfo(_token!, serialized);
+    }
+
+    if (!fnOk && !lnOk && !extrasOk) return false;
+
+    await loadMyProfile();
+    return true;
+  }
+
+  Future<String?> uploadAvatarImage() async {
+    if (_token == null) return null;
+    final picked = await pickFileForUpload();
+    if (picked == null) return null;
+
+    final mime = picked.mimeType.toLowerCase();
+    if (!mime.startsWith('image/')) {
+      _setError('Avatar must be an image', category: 'file');
+      return null;
+    }
+
+    _loading = true;
+    notifyListeners();
+    try {
+      final fileId = await file.uploadFile(
+        sessionToken: _token!,
+        bytes: picked.bytes,
+        filename: picked.filename,
+        mimeType: picked.mimeType,
       );
+      await _fileMetadataCache.put(MessengerFileInfo(
+        fileId: fileId,
+        filename: picked.filename,
+        originalSize: picked.bytes.length,
+        storedSize: picked.bytes.length,
+        isCompressed: false,
+        mimeType: picked.mimeType,
+      ));
+      return fileId;
+    } catch (e) {
+      _setError('Avatar upload failed: $e', category: 'file');
+      return null;
+    } finally {
+      _loading = false;
       notifyListeners();
     }
-    return true;
   }
 
   Future<String> pingAuth() => auth.ping();
@@ -1149,18 +1614,20 @@ class AppState extends ChangeNotifier {
     _me = null;
     _conversations.clear();
     _contacts.clear();
+    _peerProfiles.clear();
+    _onlinePeerIds.clear();
     _activeChatUserId = null;
     _activeGroupId = null;
     _activeGroupName = null;
     _groups.clear();
     _groupConversations.clear();
     _chatStatus = null;
-    _conversationStore.clear();
-    await _conversationStore.save();
-    await _messageCache.clear();
+    log.info('Signed out', category: 'auth');
+    log.setBanner(null);
+    await _conversationStore.setUserScope(null);
+    await _messageCache.setUserScope(null);
     await NotificationService.instance.cancelAll();
-    await MessageListenerService.stop();
-    if (BackgroundSync.isSupported) await BackgroundSync.cancel();
+    await BackgroundMessaging.stop();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('session_token');
     notifyListeners();

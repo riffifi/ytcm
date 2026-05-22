@@ -511,4 +511,77 @@ class AuthService {
       return false;
     }
   }
+
+  Future<bool> changeAdditionalInfo(String token, String value) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$baseUrl/changeadditionalinfo'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'session_tocken': token, 'new_value': value}),
+          )
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Resolves a user id or username to canonical uuid + login username.
+  Future<PeerLookupResult?> resolvePeerIdentity({
+    required String token,
+    required String query,
+  }) async {
+    final normalized = _normalizeQuery(query);
+    if (normalized.isEmpty) return null;
+
+    if (_looksLikeUuid(normalized)) {
+      final uuid = _normalizeUuid(normalized);
+      final resolved = await _resolvePeerOnce(token: token, query: uuid);
+      if (resolved.result != null) {
+        return resolved.result;
+      }
+      return PeerLookupResult(username: uuid, uuid: uuid);
+    }
+
+    final byName = await _resolvePeerOnce(token: token, query: normalized);
+    if (byName.result != null) return byName.result;
+
+    for (final candidate in _usernameCandidates(normalized)) {
+      final attempt = await _getUserInfoOnce(token: token, username: candidate);
+      if (attempt.result != null) return attempt.result;
+    }
+
+    return PeerLookupResult(username: normalized, uuid: normalized);
+  }
+
+  /// Full profile from GET /getuserinfo (username lookup).
+  Future<UserInfo?> fetchUserProfile({
+    required String token,
+    required String username,
+    String? uuid,
+  }) async {
+    try {
+      final uri = Uri.parse('$baseUrl/getuserinfo').replace(
+        queryParameters: {
+          'session_tocken': token,
+          'username': username,
+        },
+      );
+      final res =
+          await http.get(uri).timeout(const Duration(seconds: 15));
+      if (res.statusCode != 200) return null;
+
+      final body = res.body.trim();
+      if (!body.startsWith('{')) return null;
+
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      return UserInfo.fromProfileJson(
+        json,
+        uuid ?? (json['uuid'] as String?) ?? username,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
 }
