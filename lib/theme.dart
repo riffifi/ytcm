@@ -108,9 +108,9 @@ extension MessengerTheme on BuildContext {
 }
 
 class AppTheme {
-  static ThemeData themeFor(Brightness brightness) {
-    final c =
-        brightness == Brightness.light ? AppColors.light : AppColors.dark;
+  static ThemeData themeFor(Brightness brightness, [AppColors? palette]) {
+    final c = palette ??
+        (brightness == Brightness.light ? AppColors.light : AppColors.dark);
 
     return ThemeData(
       useMaterial3: true,
@@ -169,14 +169,19 @@ class AppTheme {
       appBarTheme: AppBarTheme(
         backgroundColor: c.bg,
         elevation: 0,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
+        centerTitle: false,
+        titleSpacing: 16,
+        toolbarHeight: 52,
         titleTextStyle: TextStyle(
           color: c.primary,
-          fontSize: 16,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
-          letterSpacing: -0.2,
+          letterSpacing: -0.3,
+          height: 1.15,
         ),
-        iconTheme: IconThemeData(color: c.secondary),
+        iconTheme: IconThemeData(color: c.secondary, size: 22),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: c.surfaceHigh,
@@ -233,8 +238,9 @@ class AppTheme {
     );
   }
 
-  static ThemeData get dark => themeFor(Brightness.dark);
-  static ThemeData get light => themeFor(Brightness.light);
+  static ThemeData dark([AppColors? palette]) => themeFor(Brightness.dark, palette);
+  static ThemeData light([AppColors? palette]) =>
+      themeFor(Brightness.light, palette);
 
   static SystemUiOverlayStyle overlayFor(Brightness brightness) {
     return SystemUiOverlayStyle(

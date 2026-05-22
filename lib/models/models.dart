@@ -1,3 +1,4 @@
+import '../utils/gif_message.dart';
 import '../utils/timestamp.dart';
 
 class ConversationPeer {
@@ -33,8 +34,11 @@ class Message {
   /// Text shown in list previews and bubbles when [text] is null/empty.
   String get previewText {
     final t = text?.trim();
-    if (t != null && t.isNotEmpty) return t;
-    if (fileId != null && fileId!.isNotEmpty) return 'Attachment';
+    if (t != null && t.isNotEmpty) {
+      if (GifMessage.isGifMessage(t)) return GifMessage.previewLabel;
+      return t;
+    }
+    if (fileId != null && fileId!.isNotEmpty) return '📎 Attachment';
     return '';
   }
 
@@ -63,6 +67,18 @@ class Message {
         deliveredAt: deliveredAt,
         status: status ?? this.status,
       );
+
+  Map<String, dynamic> toJson() => {
+        'uuid': uuid,
+        'sender_id': senderId,
+        'receiver_id': receiverId,
+        'dialog_id': dialogId,
+        'text': text,
+        'file_id': fileId,
+        'created_at': createdAt.toUtc().toIso8601String(),
+        'delivered_at': deliveredAt?.toUtc().toIso8601String(),
+        'status': status,
+      };
 }
 
 class UserInfo {

@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'services/app_state.dart';
+import 'services/appearance_preferences.dart';
+import 'services/notification_preferences.dart';
+import 'services/notification_service.dart';
 import 'services/server_settings.dart';
-import 'services/theme_preferences.dart';
 import 'screens/auth_screen.dart';
 import 'screens/conversations_screen.dart';
 import 'theme.dart';
+import 'widgets/app_lifecycle.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService.instance.init();
   runApp(const App());
 }
 
@@ -19,31 +23,37 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final serverSettings = ServerSettings();
-    final themePrefs = ThemePreferences();
+    final appearance = AppearancePreferences();
+    final notificationPrefs = NotificationPreferences();
 
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: serverSettings),
-        ChangeNotifierProvider.value(value: themePrefs),
+        ChangeNotifierProvider.value(value: appearance),
+        ChangeNotifierProvider.value(value: notificationPrefs),
         ChangeNotifierProvider(
           create: (_) => AppState(serverSettings: serverSettings),
         ),
       ],
-      child: Consumer<ThemePreferences>(
-        builder: (_, themePrefs, __) {
+      child: Consumer<AppearancePreferences>(
+        builder: (_, appearance, __) {
+          final palette = appearance.palette;
+          final lightPalette = palette.resolve(Brightness.light);
+          final darkPalette = palette.resolve(Brightness.dark);
+          final brightness =
+              appearance.isLight ? Brightness.light : Brightness.dark;
+
           SystemChrome.setSystemUIOverlayStyle(
-            AppTheme.overlayFor(
-              themePrefs.isLight ? Brightness.light : Brightness.dark,
-            ),
+            AppTheme.overlayFor(brightness),
           );
 
           return MaterialApp(
             title: 'Messenger',
             debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
-            darkTheme: AppTheme.dark,
-            themeMode: themePrefs.mode,
-            home: const _Bootstrap(),
+            theme: AppTheme.light(lightPalette),
+            darkTheme: AppTheme.dark(darkPalette),
+            themeMode: appearance.mode,
+            home: const AppLifecycleBridge(child: _Bootstrap()),
           );
         },
       ),

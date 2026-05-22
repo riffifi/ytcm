@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state.dart';
-import '../services/theme_preferences.dart';
 import '../theme.dart';
 import '../utils/messenger_snackbar.dart';
-import 'server_settings_screen.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -37,7 +36,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final c = context.mc;
     final state = context.watch<AppState>();
-    final themePrefs = context.watch<ThemePreferences>();
     final me = state.me;
 
     return Scaffold(
@@ -150,50 +148,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: const Text('Save changes'),
                 ),
           const SizedBox(height: 32),
-          _SectionLabel('Appearance'),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-              color: c.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: c.border),
-            ),
-            child: SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'Light theme',
-                style: TextStyle(color: c.primary, fontSize: 15),
-              ),
-              subtitle: Text(
-                'White background',
-                style: TextStyle(color: c.secondary, fontSize: 12),
-              ),
-              value: themePrefs.isLight,
-              activeThumbColor: Colors.white,
-              activeTrackColor: c.accent,
-              onChanged: (v) => themePrefs.setLight(v),
-            ),
-          ),
-          const SizedBox(height: 32),
-          _SectionLabel('Account'),
+          _SectionLabel('More'),
           const SizedBox(height: 12),
           _ActionTile(
-            icon: Icons.dns_outlined,
-            label: 'Server settings',
+            icon: Icons.settings_outlined,
+            label: 'Settings',
             color: c.secondary,
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const ServerSettingsScreen())),
-          ),
-          const SizedBox(height: 8),
-          _ActionTile(
-            icon: Icons.logout,
-            label: 'Sign out',
-            color: c.error,
-            onTap: () async {
-              await state.logout();
-              if (mounted) Navigator.of(context).popUntil((r) => r.isFirst);
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
           ),
         ],
       ),

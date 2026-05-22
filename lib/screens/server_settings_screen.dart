@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/file_service.dart';
 import '../services/server_settings.dart';
 import '../services/app_state.dart';
 import '../theme.dart';
@@ -17,11 +18,15 @@ class ServerSettingsScreen extends StatefulWidget {
 class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
   late TextEditingController _authCtrl;
   late TextEditingController _chatCtrl;
+  late TextEditingController _fileCtrl;
+  late TextEditingController _tenorCtrl;
   bool _saving = false;
   String? _authPingResult;
   String? _chatPingResult;
+  String? _filePingResult;
   bool _pingingAuth = false;
   bool _pingingChat = false;
+  bool _pingingFile = false;
 
   @override
   void initState() {
@@ -29,18 +34,23 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     final s = context.read<ServerSettings>();
     _authCtrl = TextEditingController(text: s.authUrl);
     _chatCtrl = TextEditingController(text: s.chatUrl);
+    _fileCtrl = TextEditingController(text: s.fileUrl);
+    _tenorCtrl = TextEditingController(text: s.tenorApiKey ?? '');
   }
 
   @override
   void dispose() {
     _authCtrl.dispose();
     _chatCtrl.dispose();
+    _fileCtrl.dispose();
+    _tenorCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     final authUrl = _authCtrl.text.trim();
     final chatUrl = _chatCtrl.text.trim();
+    final fileUrl = _fileCtrl.text.trim();
 
     if (!_isValidUrl(authUrl, requireHttp: true)) {
       _showError('Auth URL must start with http:// or https://');
@@ -50,9 +60,18 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
       _showError('Chat URL must start with ws:// or wss://');
       return;
     }
+    if (!_isValidUrl(fileUrl, requireWs: true)) {
+      _showError('File URL must start with ws:// or wss://');
+      return;
+    }
 
     setState(() => _saving = true);
-    await context.read<ServerSettings>().save(authUrl, chatUrl);
+    await context.read<ServerSettings>().save(
+          authUrl,
+          chatUrl,
+          fileUrl,
+          tenorApiKey: _tenorCtrl.text,
+        );
     if (mounted) {
       await context.read<AppState>().reconnectWithNewSettings();
     }
@@ -67,10 +86,13 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     final settings = context.read<ServerSettings>();
     await settings.reset();
     setState(() {
-      _authCtrl.text = ServerSettings.defaultAuthUrl;
-      _chatCtrl.text = ServerSettings.defaultChatUrl;
+      _authCtrl.text = ServerSettings.desktopAuthDefault;
+      _chatCtrl.text = ServerSettings.desktopChatDefault;
+      _fileCtrl.text = ServerSettings.desktopFileDefault;
+      _tenorCtrl.clear();
       _authPingResult = null;
       _chatPingResult = null;
+      _filePingResult = null;
     });
   }
 
@@ -85,6 +107,21 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
       setState(() {
         _pingingAuth = false;
         _authPingResult = result;
+      });
+    }
+  }
+
+  Future<void> _pingFile() async {
+    setState(() {
+      _pingingFile = true;
+      _filePingResult = null;
+    });
+    final result =
+        await FileService(wsUrl: _fileCtrl.text.trim()).pingReachability();
+    if (mounted) {
+      setState(() {
+        _pingingFile = false;
+        _filePingResult = result;
       });
     }
   }
@@ -160,7 +197,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           TextField(
             controller: _authCtrl,
             decoration: InputDecoration(
-              hintText: 'http://127.0.0.1:3000',
+              hintText: 'http://192.168.1.10:3000',
               prefixIcon: Icon(Icons.lock_outline,
                   color: c.secondary, size: 16),
             ),
@@ -184,7 +221,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           TextField(
             controller: _chatCtrl,
             decoration: InputDecoration(
-              hintText: 'ws://127.0.0.1:3001/ws',
+              hintText: 'ws://192.168.1.10:3001/ws',
               prefixIcon: Icon(Icons.swap_horiz,
                   color: c.secondary, size: 16),
             ),
@@ -202,6 +239,48 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           const SizedBox(height: 6),
           Text('WebSocket — real-time messaging',
               style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 20),
+          _label(context, 'File service'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _fileCtrl,
+            decoration: InputDecoration(
+              hintText: 'ws://192.168.1.10:25463/ws',
+              prefixIcon: Icon(Icons.attach_file,
+                  color: c.secondary, size: 16),
+            ),
+            keyboardType: TextInputType.url,
+            autocorrect: false,
+          ),
+          const SizedBox(height: 8),
+          _pingRow(
+            context: context,
+            label: 'Test file service',
+            loading: _pingingFile,
+            result: _filePingResult,
+            onPressed: _pingFile,
+          ),
+          const SizedBox(height: 6),
+          Text('WebSocket — upload, download, and file sharing',
+              style: Theme.of(context).textTheme.bodyMedium),
+          const SizedBox(height: 20),
+          _label(context, 'Tenor API key (GIF search)'),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _tenorCtrl,
+            decoration: InputDecoration(
+              hintText: 'Optional — uses built-in test key if empty',
+              prefixIcon:
+                  Icon(Icons.gif_box_outlined, color: c.secondary, size: 16),
+            ),
+            autocorrect: false,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Get a free key at console.cloud.google.com (Tenor API). '
+            'Leave blank to use the default search key.',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
           const SizedBox(height: 28),
           _saving
               ? _loadingButton(context)
@@ -274,8 +353,8 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'On Android emulator use 10.0.2.2 instead of 127.0.0.1. '
-              'On a physical device use your computer\'s LAN IP.',
+              'Use the same host/IP as your messenger servers (LAN IP on a phone, '
+              'not 127.0.0.1). Saved here is used everywhere, including background notifications.',
               style: TextStyle(
                 color: c.accent.withValues(alpha: 0.85),
                 fontSize: 12,

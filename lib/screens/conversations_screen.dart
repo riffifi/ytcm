@@ -4,8 +4,11 @@ import 'package:intl/intl.dart';
 import '../services/app_state.dart';
 import '../models/models.dart';
 import '../theme.dart';
+import '../utils/messenger_haptics.dart';
 import 'chat_screen.dart';
-import 'profile_screen.dart';
+import '../widgets/conversation_context_menu.dart';
+import 'groups_screen.dart';
+import 'settings_screen.dart';
 
 class ConversationsScreen extends StatelessWidget {
   const ConversationsScreen({super.key});
@@ -13,29 +16,68 @@ class ConversationsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.mc;
-    final state = context.watch<AppState>();
-    final peers = state.conversationPeers;
-    final status = state.chatStatus?.trim();
-    final showStatus = status != null && status.isNotEmpty;
+    return Selector<AppState, ({List<ConversationPeer> peers, String? status})>(
+      selector: (_, s) => (
+        peers: s.conversationPeers,
+        status: s.chatStatus?.trim(),
+      ),
+      builder: (context, data, _) {
+        final peers = data.peers;
+        final status = data.status;
+        final showStatus = status != null && status.isNotEmpty;
+        return _buildScaffold(context, c, peers, showStatus, status);
+      },
+    );
+  }
+
+  Widget _buildScaffold(
+    BuildContext context,
+    AppColors c,
+    List<ConversationPeer> peers,
+    bool showStatus,
+    String? status,
+  ) {
 
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
-        title: const Text('Messages'),
+        centerTitle: false,
+        titleSpacing: 16,
+        toolbarHeight: 52,
+        title: Text(
+          'Messages',
+          style: TextStyle(
+            color: c.primary,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.5,
+            height: 1.1,
+          ),
+        ),
         actions: [
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProfileScreen()),
-            ),
-            child: Container(
-              margin: const EdgeInsets.only(right: 16),
-              child: _Avatar(
-                label: state.me?.initials ?? '?',
-                size: 32,
-                color: c.accentSoft,
-                textColor: c.accent,
-              ),
+          IconButton(
+            onPressed: () {
+              messengerHapticSelection();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const GroupsScreen()),
+              );
+            },
+            icon: Icon(Icons.groups_outlined, color: c.secondary, size: 22),
+            tooltip: 'Groups',
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: IconButton(
+              onPressed: () {
+                messengerHapticSelection();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                );
+              },
+              icon: Icon(Icons.settings_outlined, color: c.secondary, size: 22),
+              tooltip: 'Settings',
             ),
           ),
         ],
@@ -50,7 +92,7 @@ class ConversationsScreen extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   color: c.surfaceHigh,
                   child: Text(
-                    status,
+                    status!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -72,18 +114,28 @@ class ConversationsScreen extends StatelessWidget {
               itemBuilder: (context, i) =>
                   _ConversationTile(peer: peers[i]),
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showNewChatModal(context),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          messengerHapticMedium();
+          _showNewChatModal(context);
+        },
         backgroundColor: c.accent,
-        child: const Icon(Icons.chat_bubble_outline, color: Colors.white),
-        tooltip: 'New chat',
+        elevation: 3,
+        icon: const Icon(Icons.edit_outlined, color: Colors.white, size: 20),
+        label: const Text(
+          'New chat',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 14,
+          ),
+        ),
       ),
     );
   }
 
   void _showNewChatModal(BuildContext context) {
     final c = context.mc;
-    final state = context.read<AppState>();
 
     showModalBottomSheet(
       context: context,
@@ -92,156 +144,7 @@ class ConversationsScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (ctx) {
-        final sheetColors = ctx.mc;
-        final controller = TextEditingController();
-        String? error;
-        var starting = false;
-
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: StatefulBuilder(
-            builder: (context, setState) => SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: sheetColors.border,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    Text(
-                      'Start new chat',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: sheetColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: controller,
-                      autofocus: true,
-                      decoration: InputDecoration(
-                        hintText: 'Username, email, or user ID',
-                        errorText: error,
-                        filled: true,
-                        fillColor: sheetColors.bg,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: sheetColors.border),
-                        ),
-                      ),
-                      textInputAction: TextInputAction.done,
-                      onSubmitted: (_) {
-                        if (starting) return;
-                        _startChat(
-                          navContext: context,
-                          sheetContext: ctx,
-                          state: state,
-                          query: controller.text.trim(),
-                          onStarting: () => setState(() => starting = true),
-                          onError: (e) => setState(() {
-                            starting = false;
-                            error = e;
-                          }),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => Navigator.pop(ctx),
-                            child: const Text('Cancel'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: sheetColors.accent,
-                            ),
-                            onPressed: starting
-                                ? null
-                                : () => _startChat(
-                                      navContext: context,
-                                      sheetContext: ctx,
-                                      state: state,
-                                      query: controller.text.trim(),
-                                      onStarting: () =>
-                                          setState(() => starting = true),
-                                      onError: (e) => setState(() {
-                                        starting = false;
-                                        error = e;
-                                      }),
-                                    ),
-                            child: starting
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Start',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _startChat({
-    required BuildContext navContext,
-    required BuildContext sheetContext,
-    required AppState state,
-    required String query,
-    required VoidCallback onStarting,
-    required void Function(String message) onError,
-  }) async {
-    if (query.isEmpty) {
-      onError('Please enter a username or user ID');
-      return;
-    }
-
-    onStarting();
-    final resolved = await state.resolvePeer(query);
-    if (resolved == null) {
-      onError(state.resolvePeerErrorHint(query));
-      return;
-    }
-
-    if (!sheetContext.mounted) return;
-    Navigator.pop(sheetContext);
-    state.openChat(resolved.peerId, resolved.username);
-    if (!navContext.mounted) return;
-    Navigator.push(
-      navContext,
-      MaterialPageRoute(builder: (_) => const ChatScreen()),
+      builder: (_) => const _NewChatSheet(),
     );
   }
 
@@ -274,11 +177,233 @@ class ConversationsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Tap + and enter a username or email. They do not need to be online — messages are stored until they connect.',
+              'Tap + and enter a username, email, or user ID from their Profile.',
               textAlign: TextAlign.center,
               style: TextStyle(color: c.secondary, fontSize: 13),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NewChatSheet extends StatefulWidget {
+  const _NewChatSheet();
+
+  @override
+  State<_NewChatSheet> createState() => _NewChatSheetState();
+}
+
+class _NewChatSheetState extends State<_NewChatSheet> {
+  final _controller = TextEditingController();
+  String? _error;
+  bool _starting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppState>().chat.listConnections();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _runStart(String query) async {
+    if (_starting) return;
+    final navContext = context;
+    final sheetContext = context;
+    final state = context.read<AppState>();
+
+    setState(() {
+      _starting = true;
+      _error = null;
+    });
+
+    if (query.isEmpty) {
+      setState(() {
+        _starting = false;
+        _error = 'Please enter a username or user ID';
+      });
+      return;
+    }
+
+    final resolved = await state.resolvePeer(query);
+    if (resolved == null) {
+      if (!mounted) return;
+      setState(() {
+        _starting = false;
+        _error = state.resolvePeerErrorHint(query);
+      });
+      return;
+    }
+
+    if (!sheetContext.mounted) return;
+    Navigator.pop(sheetContext);
+    state.openChat(resolved.peerId, resolved.username);
+    if (!navContext.mounted) return;
+    Navigator.push(
+      navContext,
+      MaterialPageRoute(builder: (_) => const ChatScreen()),
+    );
+  }
+
+  void _openOnlinePeer(Connection peer) {
+    messengerHapticLight();
+    final navContext = context;
+    final sheetContext = context;
+    final state = context.read<AppState>();
+    Navigator.pop(sheetContext);
+    state.openChat(peer.uuid, peer.username);
+    if (!navContext.mounted) return;
+    Navigator.push(
+      navContext,
+      MaterialPageRoute(builder: (_) => const ChatScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sheetColors = context.mc;
+    final state = context.watch<AppState>();
+    final online = state.contacts;
+
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: sheetColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              Text(
+                'Start new chat',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: sheetColors.primary,
+                ),
+              ),
+              if (online.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Text(
+                  'Connected now (optional)',
+                  style: TextStyle(
+                    color: sheetColors.secondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'You can also message offline users by username below.',
+                  style: TextStyle(
+                    color: sheetColors.secondary,
+                    fontSize: 11,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final peer in online)
+                      ActionChip(
+                        label: Text(peer.username),
+                        avatar: CircleAvatar(
+                          backgroundColor: sheetColors.accentSoft,
+                          child: Text(
+                            peer.username.isNotEmpty
+                                ? peer.username[0].toUpperCase()
+                                : '?',
+                            style: TextStyle(
+                              color: sheetColors.accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        onPressed: _starting
+                            ? null
+                            : () => _openOnlinePeer(peer),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 14),
+              TextField(
+                controller: _controller,
+                autofocus: online.isEmpty,
+                style: TextStyle(color: sheetColors.primary),
+                decoration: InputDecoration(
+                  hintText: 'Username, email, or user ID',
+                  errorText: _error,
+                  filled: true,
+                  fillColor: sheetColors.bg,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: sheetColors.border),
+                  ),
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _runStart(_controller.text.trim()),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed:
+                          _starting ? null : () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: sheetColors.accent,
+                      ),
+                      onPressed: _starting
+                          ? null
+                          : () => _runStart(_controller.text.trim()),
+                      child: _starting
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Start',
+                              style: TextStyle(color: Colors.white),
+                            ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -304,12 +429,28 @@ class _ConversationTile extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
+          messengerHapticLight();
           state.openChat(peer.userId, peer.username);
           Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => const ChatScreen()),
           );
         },
+        onLongPress: conversationContextMenuIsDesktop(context)
+            ? null
+            : () => showConversationContextMenu(
+                  context: context,
+                  peer: peer,
+                  preview: preview,
+                ),
+        onSecondaryTapDown: conversationContextMenuIsDesktop(context)
+            ? (details) => showConversationContextMenu(
+                  context: context,
+                  peer: peer,
+                  preview: preview,
+                  globalPosition: details.globalPosition,
+                )
+            : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(
@@ -330,7 +471,8 @@ class _ConversationTile extends StatelessWidget {
                             style: TextStyle(
                               color: c.primary,
                               fontSize: 15,
-                              fontWeight: FontWeight.w500,
+                              fontWeight:
+                                  unread > 0 ? FontWeight.w600 : FontWeight.w500,
                             ),
                           ),
                         ),
@@ -338,9 +480,7 @@ class _ConversationTile extends StatelessWidget {
                           Text(
                             _formatTime(lastMsg.createdAt),
                             style: TextStyle(
-                              color: unread > 0
-                                  ? c.accent
-                                  : c.tertiary,
+                              color: unread > 0 ? c.accent : c.tertiary,
                               fontSize: 11,
                             ),
                           ),
@@ -355,33 +495,14 @@ class _ConversationTile extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              color: unread > 0
-                                  ? c.primary
-                                  : c.secondary,
+                              color: unread > 0 ? c.primary : c.secondary,
                               fontSize: 13,
                             ),
                           ),
                         ),
                         if (unread > 0) ...[
                           const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: c.accent,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Text(
-                              '$unread',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
+                          _UnreadBadge(count: unread),
                         ],
                       ],
                     ),
@@ -389,8 +510,7 @@ class _ConversationTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              Icon(Icons.chevron_right,
-                  color: c.border, size: 16),
+              Icon(Icons.chevron_right, color: c.border, size: 16),
             ],
           ),
         ),
@@ -408,13 +528,43 @@ class _ConversationTile extends StatelessWidget {
   }
 }
 
+class _UnreadBadge extends StatelessWidget {
+  final int count;
+
+  const _UnreadBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.mc;
+    final label = count > 99 ? '99+' : '$count';
+    return Container(
+      constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: c.accent,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          height: 1,
+        ),
+      ),
+    );
+  }
+}
+
 class _Avatar extends StatelessWidget {
   final String label;
   final double size;
   final Color? color;
   final Color? textColor;
 
-  _Avatar({
+  const _Avatar({
     required this.label,
     this.size = 44,
     this.color,
@@ -424,14 +574,14 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.mc;
-    final bg = color ?? c.surfaceHigh;
-    final fg = textColor ?? c.secondary;
+    final bg = color ?? c.accentSoft;
+    final fg = textColor ?? c.accent;
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(size / 3),
+        shape: BoxShape.circle,
       ),
       child: Center(
         child: Text(
