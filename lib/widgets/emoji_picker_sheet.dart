@@ -1,7 +1,9 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import 'phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 
 /// Full-width emoji panel (bottom sheet) — avoids inline rebuild lag in the composer.
@@ -60,17 +62,16 @@ class EmojiPickerSheet extends StatelessWidget {
               children: [
                 Text(
                   'Emoji',
-                  style: TextStyle(
-                    color: c.primary,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.2,
-                  ),
+                  style: AppTheme.appBarTitle(c, fontSize: 16),
                 ),
                 const Spacer(),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: Icon(Icons.close_rounded, color: c.secondary, size: 22),
+                  icon: PhosphorIcon(
+                    PhosphorAssets.close,
+                    color: c.secondary,
+                    size: 22,
+                  ),
                   tooltip: 'Close',
                 ),
               ],

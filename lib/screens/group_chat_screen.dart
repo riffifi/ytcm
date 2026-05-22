@@ -5,7 +5,10 @@ import 'package:provider/provider.dart';
 
 import '../models/group_models.dart';
 import '../services/app_state.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../utils/platform_ui.dart';
+import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 import '../utils/messenger_snackbar.dart';
 import '../widgets/chat_composer.dart';
@@ -155,7 +158,10 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
       appBar: AppBar(
         title: Text(name ?? 'Group'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          icon: PhosphorIcon(
+            adaptiveBackIcon(context),
+            size: adaptiveBackIconSize(context),
+          ),
           onPressed: () {
             messengerHapticLight();
             context.read<AppState>().closeGroupChat();
@@ -164,7 +170,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_add_alt_1_outlined),
+            icon: const PhosphorIcon(PhosphorAssets.userAdd),
             tooltip: 'Add member',
             onPressed: () => _showAddMember(context),
           ),
@@ -186,9 +192,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                 _scheduleScroll(snap);
                 if (snap.messages.isEmpty) {
                   return Center(
-                    child: Text(
-                      'No messages yet',
-                      style: TextStyle(color: c.secondary),
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Text(
+                        'No messages yet — say hello',
+                        textAlign: TextAlign.center,
+                        style: AppTheme.text(c, color: c.secondary, fontSize: 14),
+                      ),
                     ),
                   );
                 }

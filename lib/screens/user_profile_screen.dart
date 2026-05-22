@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
 import '../theme.dart';
+import '../utils/platform_ui.dart';
+import '../widgets/phosphor_icon.dart';
 import '../utils/profile_extras.dart';
 import '../widgets/user_avatar.dart';
 
@@ -44,7 +46,10 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       backgroundColor: c.bg,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
+          icon: PhosphorIcon(
+            adaptiveBackIcon(context),
+            size: adaptiveBackIconSize(context),
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Profile'),

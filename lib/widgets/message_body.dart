@@ -28,7 +28,8 @@ class MessageBody extends StatelessWidget {
     if (t == null || t.isEmpty) return const SizedBox.shrink();
     return Text(
       t,
-      style: textStyle ?? TextStyle(color: colors.primary, fontSize: 15, height: 1.4),
+      style: textStyle ??
+          AppTheme.text(colors, fontSize: 15, height: 1.4),
     );
   }
 }

@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/models.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import 'phosphor_icon.dart';
 import 'file_attachment.dart';
 import 'message_body.dart';
 
@@ -11,6 +13,7 @@ class ChatMessageTile extends StatelessWidget {
   final Message message;
   final bool isMe;
   final bool showDate;
+  final bool animate;
   final AppColors colors;
   final double maxBubbleWidth;
 
@@ -19,31 +22,101 @@ class ChatMessageTile extends StatelessWidget {
     required this.message,
     required this.isMe,
     required this.showDate,
+    this.animate = false,
     required this.colors,
     required this.maxBubbleWidth,
   });
 
   @override
   Widget build(BuildContext context) {
+    final bubble = Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+          child: _Bubble(
+            message: message,
+            isMe: isMe,
+            colors: colors,
+          ),
+        ),
+      ),
+    );
+
     return RepaintBoundary(
       child: Column(
         children: [
           if (showDate) _DateDivider(date: message.createdAt, colors: colors),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
-            child: Align(
-              alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-                child: _Bubble(
-                  message: message,
-                  isMe: isMe,
-                  colors: colors,
-                ),
-              ),
-            ),
-          ),
+          if (animate)
+            _MessageEnterAnimation(isMe: isMe, child: bubble)
+          else
+            bubble,
         ],
+      ),
+    );
+  }
+}
+
+/// Quick fade + slide when a new message appears.
+class _MessageEnterAnimation extends StatefulWidget {
+  final bool isMe;
+  final Widget child;
+
+  const _MessageEnterAnimation({
+    required this.isMe,
+    required this.child,
+  });
+
+  @override
+  State<_MessageEnterAnimation> createState() => _MessageEnterAnimationState();
+}
+
+class _MessageEnterAnimationState extends State<_MessageEnterAnimation>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _opacity;
+  late final Animation<Offset> _slide;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    final curve = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+    _opacity = Tween<double>(begin: 0, end: 1).animate(curve);
+    _scale = Tween<double>(begin: 0.94, end: 1).animate(curve);
+    _slide = Tween<Offset>(
+      begin: Offset(widget.isMe ? 0.06 : -0.06, 0.08),
+      end: Offset.zero,
+    ).animate(curve);
+    _controller.forward();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _opacity,
+      child: SlideTransition(
+        position: _slide,
+        child: ScaleTransition(
+          scale: _scale,
+          alignment:
+              widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: widget.child,
+        ),
       ),
     );
   }
@@ -134,12 +207,24 @@ class _StatusIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (status == 2) {
-      return Icon(Icons.done_all, size: 12, color: colors.accent);
+      return PhosphorIcon(
+        PhosphorAssets.checks,
+        size: 12,
+        color: colors.accent,
+      );
     }
     if (status == 1) {
-      return Icon(Icons.done_all, size: 12, color: colors.tertiary);
+      return PhosphorIcon(
+        PhosphorAssets.checks,
+        size: 12,
+        color: colors.tertiary,
+      );
     }
-    return Icon(Icons.access_time, size: 10, color: colors.tertiary);
+    return PhosphorIcon(
+      PhosphorAssets.clock,
+      size: 10,
+      color: colors.tertiary,
+    );
   }
 }
 
@@ -207,3 +292,17 @@ int chatMessageFingerprint(List<Message> messages, {String? meId}) {
 
 bool sameChatDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// Animate only small batches of new messages (not full history load).
+bool shouldAnimateChatMessage({
+  required Message message,
+  required int index,
+  required int messageCount,
+  required int previousCount,
+}) {
+  if (message.uuid.startsWith('local-')) return true;
+  final added = messageCount - previousCount;
+  if (added <= 0) return false;
+  if (added > 4) return false;
+  return index >= messageCount - added;
+}

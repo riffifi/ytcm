@@ -107,10 +107,132 @@ extension MessengerTheme on BuildContext {
   }
 }
 
+/// Geist variable-font weight tokens ([wght] axis, 100–900).
+abstract final class AppFontWeight {
+  static const body = 400.0;
+  static const medium = 500.0;
+  static const semibold = 560.0;
+  static const tab = 580.0;
+  static const button = 580.0;
+  /// App bar / chat header titles — between w600 and w700.
+  static const appBar = 620.0;
+  /// Large screen titles (e.g. Messages).
+  static const heading = 680.0;
+  /// Marketing / auth hero.
+  static const display = 720.0;
+}
+
 class AppTheme {
+  static const fontFamily = 'Geist';
+
+  static FontWeight _nearestFontWeight(double wght) {
+    if (wght >= 700) return FontWeight.w700;
+    if (wght >= 600) return FontWeight.w600;
+    if (wght >= 500) return FontWeight.w500;
+    if (wght >= 300) return FontWeight.w300;
+    return FontWeight.w400;
+  }
+
+  /// Base [TextStyle] with Geist [wght] axis (variable font).
+  static TextStyle text(
+    AppColors c, {
+    Color? color,
+    double fontSize = 15,
+    double wght = AppFontWeight.body,
+    double? letterSpacing,
+    double? height,
+    FontStyle fontStyle = FontStyle.normal,
+  }) {
+    return TextStyle(
+      fontFamily: fontFamily,
+      fontVariations: [FontVariation.weight(wght.clamp(100.0, 900.0))],
+      fontWeight: _nearestFontWeight(wght),
+      color: color ?? c.primary,
+      fontSize: fontSize,
+      letterSpacing: letterSpacing,
+      height: height,
+      fontStyle: fontStyle,
+    );
+  }
+
+  /// Toolbar / navigation bar title.
+  static TextStyle appBarTitle(AppColors c, {double fontSize = 17}) => text(
+        c,
+        wght: AppFontWeight.appBar,
+        fontSize: fontSize,
+        letterSpacing: -0.12,
+        height: 1.15,
+      );
+
+  /// Primary screen title (conversation list, settings page, etc.).
+  static TextStyle heading(AppColors c, {double fontSize = 22}) => text(
+        c,
+        wght: AppFontWeight.heading,
+        fontSize: fontSize,
+        letterSpacing: -0.06,
+        height: 1.1,
+      );
+
+  /// Large marketing line (auth splash).
+  static TextStyle display(AppColors c, {double fontSize = 27}) => text(
+        c,
+        wght: AppFontWeight.display,
+        fontSize: fontSize,
+        letterSpacing: -0.04,
+        height: 1.2,
+      );
+
+  /// Uppercase section labels in settings / profile.
+  static TextStyle sectionLabel(AppColors c) => text(
+        c,
+        wght: AppFontWeight.semibold,
+        color: c.secondary,
+        fontSize: 11,
+        letterSpacing: 0.85,
+        height: 1.2,
+      );
+
+  static TextTheme _textTheme(AppColors c, Brightness brightness) {
+    final base = brightness == Brightness.light
+        ? Typography.material2021().black
+        : Typography.material2021().white;
+    return base
+        .apply(
+          fontFamily: fontFamily,
+          bodyColor: c.primary,
+          displayColor: c.primary,
+        )
+        .copyWith(
+          displayLarge: display(c),
+          titleLarge: appBarTitle(c),
+          titleMedium: text(
+            c,
+            wght: AppFontWeight.medium,
+            fontSize: 15,
+            letterSpacing: -0.08,
+          ),
+          bodyLarge: text(c, fontSize: 15, height: 1.45),
+          bodyMedium: text(
+            c,
+            color: c.secondary,
+            fontSize: 13,
+            wght: 430,
+            height: 1.4,
+          ),
+          labelSmall: text(
+            c,
+            color: c.tertiary,
+            fontSize: 11,
+            wght: 450,
+            letterSpacing: 0.35,
+          ),
+        );
+  }
+
   static ThemeData themeFor(Brightness brightness, [AppColors? palette]) {
     final c = palette ??
         (brightness == Brightness.light ? AppColors.light : AppColors.dark);
+    final textTheme = _textTheme(c, brightness);
 
     return ThemeData(
       useMaterial3: true,
@@ -136,35 +258,9 @@ class AppTheme {
               onError: Colors.white,
               onSurface: c.primary,
             ),
-      fontFamily: 'ABCDiatype',
-      textTheme: TextTheme(
-        displayLarge: TextStyle(
-          color: c.primary,
-          fontSize: 27,
-          fontWeight: FontWeight.w400,
-          letterSpacing: -0.6,
-          height: 1.2,
-        ),
-        titleLarge: TextStyle(
-          color: c.primary,
-          fontSize: 17,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.2,
-        ),
-        titleMedium: TextStyle(
-          color: c.primary,
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          letterSpacing: -0.1,
-        ),
-        bodyLarge: TextStyle(color: c.primary, fontSize: 15, height: 1.45),
-        bodyMedium: TextStyle(color: c.secondary, fontSize: 13, height: 1.4),
-        labelSmall: TextStyle(
-          color: c.tertiary,
-          fontSize: 11,
-          letterSpacing: 0.4,
-        ),
-      ),
+      fontFamily: fontFamily,
+      textTheme: textTheme,
+      primaryTextTheme: textTheme,
       dividerColor: c.borderSoft,
       appBarTheme: AppBarTheme(
         backgroundColor: c.bg,
@@ -174,25 +270,36 @@ class AppTheme {
         centerTitle: false,
         titleSpacing: 16,
         toolbarHeight: 52,
-        titleTextStyle: TextStyle(
-          color: c.primary,
-          fontSize: 17,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.3,
-          height: 1.15,
-        ),
+        titleTextStyle: appBarTitle(c),
         iconTheme: IconThemeData(color: c.secondary, size: 22),
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: c.surfaceHigh,
-        contentTextStyle: TextStyle(color: c.primary, fontSize: 14),
+        contentTextStyle: text(c, fontSize: 14),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+      dialogTheme: DialogThemeData(
+        titleTextStyle: appBarTitle(c),
+        contentTextStyle: text(c, fontSize: 15, height: 1.45),
+      ),
+      listTileTheme: ListTileThemeData(
+        titleTextStyle: text(c, fontSize: 15, wght: AppFontWeight.medium),
+        subtitleTextStyle: text(c, color: c.secondary, fontSize: 13, height: 1.35),
+      ),
+      tabBarTheme: TabBarThemeData(
+        labelStyle: text(c, fontSize: 14, wght: AppFontWeight.tab),
+        unselectedLabelStyle: text(
+          c,
+          color: c.secondary,
+          fontSize: 14,
+          wght: 450,
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: c.surfaceHigh,
-        hintStyle: TextStyle(color: c.tertiary, fontSize: 15),
+        hintStyle: text(c, color: c.tertiary, fontSize: 15),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(13),
           borderSide: BorderSide.none,
@@ -207,6 +314,18 @@ class AppTheme {
         ),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+        prefixIconConstraints: const BoxConstraints(
+          minWidth: 40,
+          maxWidth: 40,
+          minHeight: 24,
+          maxHeight: 24,
+        ),
+        suffixIconConstraints: const BoxConstraints(
+          minWidth: 40,
+          maxWidth: 40,
+          minHeight: 24,
+          maxHeight: 24,
+        ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -217,18 +336,24 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(13),
           ),
-          textStyle: const TextStyle(
+          textStyle: text(
+            c,
+            color: Colors.white,
             fontSize: 15,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.1,
+            wght: AppFontWeight.button,
+            letterSpacing: 0.06,
           ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: c.accent,
-          textStyle:
-              const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+          textStyle: text(
+            c,
+            color: c.accent,
+            fontSize: 14,
+            wght: AppFontWeight.medium,
+          ),
         ),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(

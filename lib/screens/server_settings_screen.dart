@@ -5,7 +5,10 @@ import '../services/chat_service.dart';
 import '../services/file_service.dart';
 import '../services/server_settings.dart';
 import '../services/app_state.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../utils/platform_ui.dart';
+import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_snackbar.dart';
 
 class ServerSettingsScreen extends StatefulWidget {
@@ -178,7 +181,10 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
       backgroundColor: c.bg,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
+          icon: PhosphorIcon(
+            adaptiveBackIcon(context),
+            size: adaptiveBackIconSize(context),
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Server settings'),
@@ -198,8 +204,10 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
             controller: _authCtrl,
             decoration: InputDecoration(
               hintText: 'http://192.168.1.10:3000',
-              prefixIcon: Icon(Icons.lock_outline,
-                  color: c.secondary, size: 16),
+              prefixIcon: PhosphorIcon.forInput(
+                PhosphorAssets.lock,
+                color: c.secondary,
+              ),
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
@@ -222,8 +230,10 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
             controller: _chatCtrl,
             decoration: InputDecoration(
               hintText: 'ws://192.168.1.10:3001/ws',
-              prefixIcon: Icon(Icons.swap_horiz,
-                  color: c.secondary, size: 16),
+              prefixIcon: PhosphorIcon.forInput(
+                PhosphorAssets.arrowsLeftRight,
+                color: c.secondary,
+              ),
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
@@ -246,8 +256,10 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
             controller: _fileCtrl,
             decoration: InputDecoration(
               hintText: 'ws://192.168.1.10:25463/ws',
-              prefixIcon: Icon(Icons.attach_file,
-                  color: c.secondary, size: 16),
+              prefixIcon: PhosphorIcon.forInput(
+                PhosphorAssets.attach,
+                color: c.secondary,
+              ),
             ),
             keyboardType: TextInputType.url,
             autocorrect: false,
@@ -270,8 +282,10 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
             controller: _tenorCtrl,
             decoration: InputDecoration(
               hintText: 'Optional — uses built-in test key if empty',
-              prefixIcon:
-                  Icon(Icons.gif_box_outlined, color: c.secondary, size: 16),
+              prefixIcon: PhosphorIcon.forInput(
+                PhosphorAssets.gif,
+                color: c.secondary,
+              ),
             ),
             autocorrect: false,
           ),
@@ -317,7 +331,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Icons.network_ping, size: 16),
+              : const PhosphorIcon(PhosphorAssets.testConnection, size: 16),
           label: Text(label),
         ),
         if (result != null) ...[
@@ -349,7 +363,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, color: c.accent, size: 16),
+          PhosphorIcon(PhosphorAssets.info, color: c.accent, size: 16),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -371,12 +385,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     final c = context.mc;
     return Text(
       text.toUpperCase(),
-      style: TextStyle(
-        color: c.secondary,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.8,
-      ),
+      style: AppTheme.sectionLabel(c),
     );
   }
 

@@ -4,10 +4,11 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../services/app_state.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 import '../utils/platform_ui.dart';
-import '../utils/profile_extras.dart';
 import '../utils/messenger_snackbar.dart';
 import '../widgets/chat_app_bar_title.dart';
 import 'user_profile_screen.dart';
@@ -55,6 +56,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollCtrl = ScrollController();
   int _trackedCount = 0;
   int _trackedFingerprint = 0;
+  /// Message count before the current frame (for enter animations).
+  int _previousMessageCount = 0;
   bool _scrollPending = false;
 
   static const scrollDownThreshold = 72.0;
@@ -95,8 +98,12 @@ class _ChatScreenState extends State<ChatScreen> {
   void _scheduleScrollIfNeeded(_ChatListSnapshot snap) {
     final count = snap.messages.length;
     final fp = snap.fingerprint;
-    if (count == _trackedCount && fp == _trackedFingerprint) return;
+    if (count == _trackedCount && fp == _trackedFingerprint) {
+      _previousMessageCount = count;
+      return;
+    }
 
+    _previousMessageCount = _trackedCount;
     final grew = count > _trackedCount;
     final firstLoad = _trackedCount == 0 && count > 0;
     _trackedCount = count;
@@ -116,7 +123,15 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _send(String text) {
-    context.read<AppState>().sendMessage(text);
+    if (text.trim().isEmpty) return;
+    final state = context.read<AppState>();
+    if (!state.chat.isConnected) {
+      showMessengerSnackBar(
+        context,
+        'Connecting… your message will send when ready',
+      );
+    }
+    state.sendMessage(text);
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (mounted) _scrollToBottom();
     });
@@ -204,6 +219,12 @@ class _ChatScreenState extends State<ChatScreen> {
                               message: msg,
                               isMe: msg.senderId == meId,
                               showDate: showDate,
+                              animate: shouldAnimateChatMessage(
+                                message: msg,
+                                index: i,
+                                messageCount: snap.messages.length,
+                                previousCount: _previousMessageCount,
+                              ),
                               colors: c,
                               maxBubbleWidth: maxW,
                             );
@@ -246,7 +267,11 @@ class _ChatScreenState extends State<ChatScreen> {
       leading: widget.embedded
           ? (widget.onClose != null
               ? IconButton(
-                  icon: Icon(Icons.close, size: 22, color: c.secondary),
+                  icon: PhosphorIcon(
+                    PhosphorAssets.close,
+                    size: 22,
+                    color: c.secondary,
+                  ),
                   onPressed: () {
                     messengerHapticLight();
                     widget.onClose!();
@@ -254,7 +279,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 )
               : null)
           : IconButton(
-              icon: Icon(
+              icon: PhosphorIcon(
                 adaptiveBackIcon(context),
                 size: adaptiveBackIconSize(context),
                 color: c.secondary,
@@ -299,7 +324,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: c.accentSoft,
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.waving_hand_outlined, color: c.accent, size: 28),
+              child: PhosphorIcon(
+                PhosphorAssets.handWave,
+                color: c.accent,
+                size: 28,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -366,8 +395,8 @@ class _ScrollDownFab extends StatelessWidget {
                       shape: BoxShape.circle,
                       border: Border.all(color: c.border),
                     ),
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
+                    child: PhosphorIcon(
+                      PhosphorAssets.caretDown,
                       size: 22,
                       color: c.secondary,
                     ),

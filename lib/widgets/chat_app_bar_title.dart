@@ -62,21 +62,17 @@ class ChatAppBarTitle extends StatelessWidget {
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  color: c.primary,
-                  letterSpacing: -0.3,
-                  height: 1.15,
-                ),
+                style: AppTheme.appBarTitle(c),
               ),
               if (subtitle != null && subtitle!.isNotEmpty)
                 Text(
                   subtitle!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: AppTheme.text(
+                    c,
                     fontSize: 12,
+                    wght: 450,
                     color: online ? c.success : c.tertiary,
                     height: 1.1,
                   ),

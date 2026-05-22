@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 
 import '../models/messenger_file.dart';
 import '../services/app_state.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import 'phosphor_icon.dart';
 import '../utils/chat_image.dart';
 import '../utils/messenger_snackbar.dart';
 
@@ -138,10 +140,8 @@ class _FileAttachmentState extends State<FileAttachment> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            _loading
-                ? Icons.hourglass_top
-                : Icons.insert_drive_file_outlined,
+          PhosphorIcon(
+            _loading ? PhosphorAssets.hourglass : PhosphorAssets.file,
             color: widget.isMe ? Colors.white70 : c.accent,
             size: 28,
           ),

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../utils/platform_ui.dart';
+import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_snackbar.dart';
 import '../utils/profile_extras.dart';
 import '../widgets/user_avatar.dart';
@@ -81,7 +84,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       backgroundColor: c.bg,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
+          icon: PhosphorIcon(
+            adaptiveBackIcon(context),
+            size: adaptiveBackIconSize(context),
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Profile'),
@@ -121,8 +127,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     color: Colors.white,
                                   ),
                                 )
-                              : const Icon(
-                                  Icons.camera_alt_outlined,
+                              : const PhosphorIcon(
+                                  PhosphorAssets.camera,
                                   size: 16,
                                   color: Colors.white,
                                 ),
@@ -227,7 +233,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _SectionLabel('More'),
           const SizedBox(height: 12),
           _ActionTile(
-            icon: Icons.settings_outlined,
+            icon: PhosphorAssets.settings,
             label: 'Settings',
             color: c.secondary,
             onTap: () => Navigator.push(
@@ -250,18 +256,13 @@ class _SectionLabel extends StatelessWidget {
     final c = context.mc;
     return Text(
       text.toUpperCase(),
-      style: TextStyle(
-        color: c.secondary,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.8,
-      ),
+      style: AppTheme.sectionLabel(c),
     );
   }
 }
 
 class _ActionTile extends StatelessWidget {
-  final IconData icon;
+  final String icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
@@ -287,7 +288,7 @@ class _ActionTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 18),
+            PhosphorIcon(icon, color: color, size: 18),
             const SizedBox(width: 12),
             Text(
               label,

@@ -7,7 +7,9 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../services/app_state.dart';
 import '../services/notification_preferences.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import 'phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 import '../screens/chat_screen.dart';
 import '../utils/platform_ui.dart';
@@ -280,7 +282,7 @@ class _MenuActions extends StatelessWidget {
     return Column(
       children: [
         _ActionRow(
-          icon: Icons.chat_bubble_outline,
+          icon: PhosphorAssets.chat,
           label: 'Open chat',
           onTap: () {
             onClose();
@@ -289,7 +291,7 @@ class _MenuActions extends StatelessWidget {
         ),
         if (unread > 0)
           _ActionRow(
-            icon: Icons.done_all_outlined,
+            icon: PhosphorAssets.checks,
             label: 'Mark as read',
             onTap: () {
               onClose();
@@ -299,8 +301,8 @@ class _MenuActions extends StatelessWidget {
         if (NotificationPreferences.isMobilePlatform)
           _ActionRow(
             icon: notifEnabled
-                ? Icons.notifications_off_outlined
-                : Icons.notifications_active_outlined,
+                ? PhosphorAssets.bellOff
+                : PhosphorAssets.bellRinging,
             label: notifEnabled
                 ? 'Turn off notifications'
                 : 'Turn on notifications',
@@ -315,7 +317,7 @@ class _MenuActions extends StatelessWidget {
 }
 
 class _ActionRow extends StatelessWidget {
-  final IconData icon;
+  final String icon;
   final String label;
   final VoidCallback onTap;
 
@@ -337,7 +339,7 @@ class _ActionRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
           child: Row(
             children: [
-              Icon(icon, color: c.secondary, size: 22),
+              PhosphorIcon(icon, color: c.secondary, size: 22),
               const SizedBox(width: 14),
               Text(
                 label,

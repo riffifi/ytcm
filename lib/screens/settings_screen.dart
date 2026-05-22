@@ -6,7 +6,10 @@ import '../services/app_state.dart';
 import '../services/appearance_preferences.dart';
 import '../services/background_messaging.dart';
 import '../services/notification_preferences.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../widgets/phosphor_icon.dart';
+import '../utils/platform_ui.dart';
 import '../widgets/log_status_bar.dart';
 import 'profile_screen.dart';
 import 'server_settings_screen.dart';
@@ -26,7 +29,10 @@ class SettingsScreen extends StatelessWidget {
       backgroundColor: c.bg,
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
+          icon: PhosphorIcon(
+            adaptiveBackIcon(context),
+            size: adaptiveBackIconSize(context),
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('Settings'),
@@ -42,7 +48,7 @@ class SettingsScreen extends StatelessWidget {
             _SectionLabel('Account'),
             const SizedBox(height: 10),
             _NavTile(
-              icon: Icons.person_outline,
+              icon: PhosphorAssets.user,
               label: 'Profile',
               subtitle: '@${me.username}',
               onTap: () => Navigator.push(
@@ -143,7 +149,7 @@ class SettingsScreen extends StatelessWidget {
           _SectionLabel('Server'),
           const SizedBox(height: 10),
           _NavTile(
-            icon: Icons.dns_outlined,
+            icon: PhosphorAssets.server,
             label: 'Server settings',
             subtitle: 'Auth and chat URLs',
             onTap: () => Navigator.push(
@@ -155,7 +161,7 @@ class SettingsScreen extends StatelessWidget {
           _SectionLabel('Session'),
           const SizedBox(height: 10),
           _NavTile(
-            icon: Icons.logout,
+            icon: PhosphorAssets.logout,
             label: 'Sign out',
             subtitle: null,
             labelColor: c.error,
@@ -180,18 +186,13 @@ class _SectionLabel extends StatelessWidget {
     final c = context.mc;
     return Text(
       text.toUpperCase(),
-      style: TextStyle(
-        color: c.secondary,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.8,
-      ),
+      style: AppTheme.sectionLabel(c),
     );
   }
 }
 
 class _NavTile extends StatelessWidget {
-  final IconData icon;
+  final String icon;
   final String label;
   final String? subtitle;
   final Color? labelColor;
@@ -223,7 +224,7 @@ class _NavTile extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Icon(icon, color: fg, size: 20),
+              PhosphorIcon(icon, color: fg, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -247,7 +248,11 @@ class _NavTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.chevron_right, color: c.tertiary, size: 18),
+              PhosphorIcon(
+                PhosphorAssets.caretRight,
+                color: c.tertiary,
+                size: 18,
+              ),
             ],
           ),
         ),

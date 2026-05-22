@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../services/messenger_log.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import 'phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 import '../utils/messenger_snackbar.dart';
 
@@ -182,7 +184,7 @@ class _LogHeader extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
-                Icon(_levelIcon(level), size: 14, color: accent),
+                PhosphorIcon(_levelIcon(level), size: 14, color: accent),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -209,8 +211,8 @@ class _LogHeader extends StatelessWidget {
                     ),
                   ),
                 const SizedBox(width: 4),
-                Icon(
-                  expanded ? Icons.expand_less : Icons.expand_more,
+                PhosphorIcon(
+                  expanded ? PhosphorAssets.caretUp : PhosphorAssets.caretDown,
                   size: 18,
                   color: c.tertiary,
                 ),
@@ -222,16 +224,16 @@ class _LogHeader extends StatelessWidget {
     );
   }
 
-  IconData _levelIcon(LogLevel level) {
+  String _levelIcon(LogLevel level) {
     switch (level) {
       case LogLevel.error:
-        return Icons.error_outline;
+        return PhosphorAssets.warningCircle;
       case LogLevel.warn:
-        return Icons.warning_amber_outlined;
+        return PhosphorAssets.warning;
       case LogLevel.info:
-        return Icons.info_outline;
+        return PhosphorAssets.info;
       case LogLevel.debug:
-        return Icons.bug_report_outlined;
+        return PhosphorAssets.bug;
     }
   }
 }

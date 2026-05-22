@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state.dart';
 import '../services/server_settings.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../widgets/phosphor_icon.dart';
 import 'server_settings_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -157,28 +159,39 @@ class _AuthScreenState extends State<AuthScreen>
                 children: [
                   Text(
                     'YTCm',
-                    style: TextStyle(
-                      fontSize: 52,
-                      fontWeight: FontWeight.w700,
-                      color: c.primary,
-                      letterSpacing: -1.5,
+                    style: AppTheme.display(c, fontSize: 52).copyWith(
+                      letterSpacing: -0.08,
                     ),
                   ),
                   const SizedBox(height: 12),
                   Text(
                     'Minimal. Secure. Fast.',
-                    style: TextStyle(
+                    style: AppTheme.text(
+                      c,
                       fontSize: 18,
                       color: c.secondary,
-                      fontWeight: FontWeight.w400,
+                      wght: 420,
+                      letterSpacing: 0.02,
                     ),
                   ),
                   const SizedBox(height: 48),
-                  _featurePill(context, Icons.lock_outline, 'End-to-end encrypted'),
+                  _featurePill(
+                    context,
+                    PhosphorAssets.lock,
+                    'End-to-end encrypted',
+                  ),
                   const SizedBox(height: 12),
-                  _featurePill(context, Icons.bolt_outlined, 'Real-time messaging'),
+                  _featurePill(
+                    context,
+                    PhosphorAssets.bolt,
+                    'Real-time messaging',
+                  ),
                   const SizedBox(height: 12),
-                  _featurePill(context, Icons.devices_outlined, 'Cross-platform'),
+                  _featurePill(
+                    context,
+                    PhosphorAssets.devices,
+                    'Cross-platform',
+                  ),
                   const Spacer(),
                   _serverBadge(context),
                 ],
@@ -225,7 +238,7 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
-  Widget _featurePill(BuildContext context, IconData icon, String label) {
+  Widget _featurePill(BuildContext context, String icon, String label) {
     final c = context.mc;
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -236,7 +249,7 @@ class _AuthScreenState extends State<AuthScreen>
             color: c.accentSoft,
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, color: c.accent, size: 16),
+          child: PhosphorIcon(icon, color: c.accent, size: 16),
         ),
         const SizedBox(width: 12),
         Text(label,
@@ -264,8 +277,11 @@ class _AuthScreenState extends State<AuthScreen>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.dns_outlined,
-                  color: c.secondary, size: 14),
+              PhosphorIcon(
+                PhosphorAssets.server,
+                color: c.secondary,
+                size: 14,
+              ),
               const SizedBox(width: 6),
               Text(
                 _hostOnly(s.authUrl),
@@ -290,11 +306,10 @@ class _AuthScreenState extends State<AuthScreen>
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Messenger',
-                style: Theme.of(context)
-                    .textTheme
-                    .displayLarge
-                    ?.copyWith(fontWeight: FontWeight.w600)),
+            Text(
+              'Messenger',
+              style: Theme.of(context).textTheme.displayLarge,
+            ),
             const SizedBox(height: 4),
             Text('Minimal. Secure. Fast.',
                 style: Theme.of(context).textTheme.bodyMedium),
@@ -317,8 +332,11 @@ class _AuthScreenState extends State<AuthScreen>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.dns_outlined,
-                    color: c.secondary, size: 13),
+                PhosphorIcon(
+                  PhosphorAssets.server,
+                  color: c.secondary,
+                  size: 13,
+                ),
                 const SizedBox(width: 5),
                 Consumer<ServerSettings>(
                   builder: (_, s, __) => Text(
@@ -426,12 +444,9 @@ class _AuthScreenState extends State<AuthScreen>
               hintText: 'Password',
               suffixIcon: GestureDetector(
                 onTap: () => setState(() => _obscure = !_obscure),
-                child: Icon(
-                  _obscure
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
+                child: PhosphorIcon.forInput(
+                  _obscure ? PhosphorAssets.eyeSlash : PhosphorAssets.eye,
                   color: c.secondary,
-                  size: 18,
                 ),
               ),
             ),
@@ -494,12 +509,9 @@ class _AuthScreenState extends State<AuthScreen>
               suffixIcon: GestureDetector(
                 onTap: () =>
                     setState(() => _obscureReg = !_obscureReg),
-                child: Icon(
-                  _obscureReg
-                      ? Icons.visibility_off_outlined
-                      : Icons.visibility_outlined,
+                child: PhosphorIcon.forInput(
+                  _obscureReg ? PhosphorAssets.eyeSlash : PhosphorAssets.eye,
                   color: c.secondary,
-                  size: 18,
                 ),
               ),
             ),

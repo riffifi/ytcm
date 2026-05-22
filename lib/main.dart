@@ -59,6 +59,17 @@ class App extends StatelessWidget {
             theme: AppTheme.light(lightPalette),
             darkTheme: AppTheme.dark(darkPalette),
             themeMode: appearance.mode,
+            builder: (context, child) {
+              final theme = Theme.of(context);
+              return DefaultTextStyle(
+                style: TextStyle(
+                  fontFamily: AppTheme.fontFamily,
+                  color: theme.colorScheme.onSurface,
+                  fontSize: 14,
+                ),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: const AppLifecycleBridge(child: _Bootstrap()),
           );
         },

@@ -3,7 +3,10 @@ import 'package:provider/provider.dart';
 
 import '../models/group_models.dart';
 import '../services/app_state.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../utils/platform_ui.dart';
+import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 import '../utils/messenger_snackbar.dart';
 import 'group_chat_screen.dart';
@@ -19,23 +22,49 @@ class GroupsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Groups'),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 18),
+          icon: PhosphorIcon(
+            adaptiveBackIcon(context),
+            size: adaptiveBackIconSize(context),
+          ),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateGroup(context),
-        child: const Icon(Icons.group_add),
+        child: const PhosphorIcon(PhosphorAssets.userAdd),
       ),
       body: Selector<AppState, List<ChatGroup>>(
         selector: (_, s) => s.groups,
         builder: (context, groups, _) {
           if (groups.isEmpty) {
             return Center(
-              child: Text(
-                'No groups yet.\nTap + to create one.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: c.secondary, height: 1.5),
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PhosphorIcon(
+                      PhosphorAssets.groups,
+                      size: 40,
+                      color: c.border,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No groups yet',
+                      style: AppTheme.text(
+                        c,
+                        fontSize: 15,
+                        wght: AppFontWeight.medium,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Tap + to create a group or channel',
+                      textAlign: TextAlign.center,
+                      style: AppTheme.text(c, color: c.secondary, fontSize: 13),
+                    ),
+                  ],
+                ),
               ),
             );
           }
@@ -49,8 +78,10 @@ class GroupsScreen extends StatelessWidget {
               return ListTile(
                 leading: CircleAvatar(
                   backgroundColor: c.accentSoft,
-                  child: Icon(
-                    group.isChannel ? Icons.campaign_outlined : Icons.groups,
+                  child: PhosphorIcon(
+                    group.isChannel
+                        ? PhosphorAssets.megaphone
+                        : PhosphorAssets.groups,
                     color: c.accent,
                   ),
                 ),

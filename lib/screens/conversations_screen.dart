@@ -3,9 +3,10 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../services/app_state.dart';
 import '../models/models.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
-import 'chat_screen.dart';
 import '../widgets/conversation_context_menu.dart';
 import 'groups_screen.dart';
 import '../widgets/user_avatar.dart';
@@ -25,16 +26,34 @@ class ConversationsScreen extends StatefulWidget {
     this.onPeerSelected,
   });
 
-  static void showNewChatModal(BuildContext context) {
+  static void showNewChatModal(
+    BuildContext context, {
+    ValueChanged<ConversationPeer>? onPeerSelected,
+  }) {
     final c = context.mc;
-    showModalBottomSheet(
+    final sheet = _NewChatSheet(onPeerSelected: onPeerSelected);
+    if (isWideLayout(context)) {
+      showDialog<void>(
+        context: context,
+        builder: (ctx) => Dialog(
+          backgroundColor: c.surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: sheet,
+          ),
+        ),
+      );
+      return;
+    }
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: c.surfaceHigh,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (_) => const _NewChatSheet(),
+      builder: (_) => sheet,
     );
   }
 
@@ -44,6 +63,29 @@ class ConversationsScreen extends StatefulWidget {
 
 class _ConversationsScreenState extends State<ConversationsScreen> {
   String _prefetchKey = '';
+  String _searchQuery = '';
+  final _searchFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  List<ConversationPeer> _filterPeers(
+    BuildContext context,
+    List<ConversationPeer> peers,
+  ) {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return peers;
+    final state = context.read<AppState>();
+    return peers.where((p) {
+      final name = state.peerDisplayName(p.userId).toLowerCase();
+      final user = p.username.toLowerCase();
+      final id = p.userId.toLowerCase();
+      return name.contains(q) || user.contains(q) || id.contains(q);
+    }).toList();
+  }
 
   void _scheduleProfilePrefetch(List<ConversationPeer> peers) {
     final key = peers.map((p) => p.userId).join('\x1e');
@@ -74,6 +116,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     AppColors c,
     List<ConversationPeer> peers,
   ) {
+    final filtered = _filterPeers(context, peers);
+    final hasQuery = _searchQuery.trim().isNotEmpty;
 
     return Scaffold(
       backgroundColor: c.bg,
@@ -81,17 +125,24 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         centerTitle: false,
         titleSpacing: 16,
         toolbarHeight: 52,
-        title: Text(
-          'Messages',
-          style: TextStyle(
-            color: c.primary,
-            fontSize: 22,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.5,
-            height: 1.1,
-          ),
-        ),
+        title: Text('Messages', style: AppTheme.heading(c)),
         actions: [
+          if (widget.selectionMode)
+            IconButton(
+              onPressed: () {
+                messengerHapticSelection();
+                ConversationsScreen.showNewChatModal(
+                  context,
+                  onPeerSelected: widget.onPeerSelected,
+                );
+              },
+              icon: PhosphorIcon(
+                PhosphorAssets.edit,
+                color: c.secondary,
+                size: 22,
+              ),
+              tooltip: 'New chat',
+            ),
           IconButton(
             onPressed: () {
               messengerHapticSelection();
@@ -100,7 +151,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                 MaterialPageRoute(builder: (_) => const GroupsScreen()),
               );
             },
-            icon: Icon(Icons.groups_outlined, color: c.secondary, size: 22),
+            icon: PhosphorIcon(
+              PhosphorAssets.groups,
+              color: c.secondary,
+              size: 22,
+            ),
             tooltip: 'Groups',
           ),
           Padding(
@@ -113,41 +168,99 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 );
               },
-              icon: Icon(Icons.settings_outlined, color: c.secondary, size: 22),
+              icon: PhosphorIcon(
+                PhosphorAssets.settings,
+                color: c.secondary,
+                size: 22,
+              ),
               tooltip: 'Settings',
             ),
           ),
         ],
-      ),
-      body: peers.isEmpty
-          ? _emptyState(context)
-          : ListView.builder(
-              padding: EdgeInsets.zero,
-              itemCount: peers.length,
-              itemBuilder: (context, i) => _ConversationTile(
-                peer: peers[i],
-                selectionMode: widget.selectionMode,
-                selected: widget.selectedPeerId == peers[i].userId,
-                onPeerSelected: widget.onPeerSelected,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(52),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            child: TextField(
+              focusNode: _searchFocus,
+              onChanged: (v) => setState(() => _searchQuery = v),
+              style: AppTheme.text(c, fontSize: 15),
+              cursorColor: c.accent,
+              decoration: InputDecoration(
+                hintText: 'Search chats',
+                isDense: true,
+                prefixIcon: PhosphorIcon.forInput(
+                  PhosphorAssets.search,
+                  color: c.tertiary,
+                ),
+                suffixIcon: hasQuery
+                    ? IconButton(
+                        icon: PhosphorIcon(
+                          PhosphorAssets.close,
+                          color: c.tertiary,
+                          size: 18,
+                        ),
+                        tooltip: 'Clear search',
+                        onPressed: () => setState(() => _searchQuery = ''),
+                      )
+                    : null,
               ),
             ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          messengerHapticMedium();
-          ConversationsScreen.showNewChatModal(context);
-        },
-        backgroundColor: c.accent,
-        elevation: 3,
-        icon: const Icon(Icons.edit_outlined, color: Colors.white, size: 20),
-        label: const Text(
-          'New chat',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
           ),
         ),
       ),
+      body: peers.isEmpty
+          ? _emptyState(context)
+          : filtered.isEmpty
+              ? Center(
+                  child: Text(
+                    'No chats match “$_searchQuery”',
+                    style: AppTheme.text(c, color: c.secondary, fontSize: 14),
+                  ),
+                )
+              : RefreshIndicator(
+                  color: c.accent,
+                  onRefresh: () async {
+                    context.read<AppState>().chat.listConnections();
+                    await Future<void>.delayed(
+                      const Duration(milliseconds: 400),
+                    );
+                  },
+                  child: ListView.builder(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: EdgeInsets.zero,
+                    itemCount: filtered.length,
+                    itemBuilder: (context, i) => _ConversationTile(
+                      peer: filtered[i],
+                      selectionMode: widget.selectionMode,
+                      selected: widget.selectedPeerId == filtered[i].userId,
+                      onPeerSelected: widget.onPeerSelected,
+                    ),
+                  ),
+                ),
+      floatingActionButton: widget.selectionMode
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () {
+                messengerHapticMedium();
+                ConversationsScreen.showNewChatModal(context);
+              },
+              backgroundColor: c.accent,
+              elevation: 3,
+              icon: const PhosphorIcon(
+                PhosphorAssets.edit,
+                color: Colors.white,
+                size: 20,
+              ),
+              label: const Text(
+                'New chat',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
+              ),
+            ),
     );
   }
 
@@ -166,8 +279,11 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                 color: c.surfaceHigh,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Icon(Icons.chat_bubble_outline,
-                  color: c.secondary, size: 28),
+              child: PhosphorIcon(
+                PhosphorAssets.chat,
+                color: c.secondary,
+                size: 28,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -192,7 +308,9 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
 }
 
 class _NewChatSheet extends StatefulWidget {
-  const _NewChatSheet();
+  final ValueChanged<ConversationPeer>? onPeerSelected;
+
+  const _NewChatSheet({this.onPeerSelected});
 
   @override
   State<_NewChatSheet> createState() => _NewChatSheetState();
@@ -248,11 +366,12 @@ class _NewChatSheetState extends State<_NewChatSheet> {
 
     if (!sheetContext.mounted) return;
     Navigator.pop(sheetContext);
-    state.openChat(resolved.peerId, resolved.username);
     if (!navContext.mounted) return;
-    Navigator.push(
+    openChatInApp(
       navContext,
-      MaterialPageRoute(builder: (_) => const ChatScreen()),
+      peerId: resolved.peerId,
+      username: resolved.username,
+      onPeerSelected: widget.onPeerSelected,
     );
   }
 
@@ -260,13 +379,13 @@ class _NewChatSheetState extends State<_NewChatSheet> {
     messengerHapticLight();
     final navContext = context;
     final sheetContext = context;
-    final state = context.read<AppState>();
     Navigator.pop(sheetContext);
-    state.openChat(peer.uuid, peer.username);
     if (!navContext.mounted) return;
-    Navigator.push(
+    openChatInApp(
       navContext,
-      MaterialPageRoute(builder: (_) => const ChatScreen()),
+      peerId: peer.uuid,
+      username: peer.username,
+      onPeerSelected: widget.onPeerSelected,
     );
   }
 
@@ -446,15 +565,12 @@ class _ConversationTile extends StatelessWidget {
         mouseCursor: SystemMouseCursors.click,
         onTap: () {
           messengerHapticLight();
-          state.openChat(peer.userId, peer.username);
-          if (selectionMode && onPeerSelected != null) {
-            onPeerSelected!(peer);
-          } else {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ChatScreen()),
-            );
-          }
+          openChatInApp(
+            context,
+            peerId: peer.userId,
+            username: peer.username,
+            onPeerSelected: selectionMode ? onPeerSelected : null,
+          );
         },
         onLongPress: conversationContextMenuIsDesktop(context)
             ? null
@@ -561,8 +677,14 @@ class _ConversationTile extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, color: c.border, size: 20),
+              if (!selectionMode) ...[
+                const SizedBox(width: 4),
+                PhosphorIcon(
+                  PhosphorAssets.caretRight,
+                  color: c.border,
+                  size: 20,
+                ),
+              ],
             ],
           ),
         ),

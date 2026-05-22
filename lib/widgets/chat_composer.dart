@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 
 import '../services/gif_search_service.dart';
 import '../services/server_settings.dart';
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import 'phosphor_icon.dart';
 import '../utils/gif_message.dart';
 import '../utils/messenger_haptics.dart';
 import 'emoji_picker_sheet.dart';
@@ -14,11 +16,13 @@ import 'emoji_picker_sheet.dart';
 class ChatComposer extends StatefulWidget {
   final ValueChanged<String> onSend;
   final VoidCallback? onAttach;
+  final bool autofocus;
 
   const ChatComposer({
     super.key,
     required this.onSend,
     this.onAttach,
+    this.autofocus = true,
   });
 
   @override
@@ -42,6 +46,11 @@ class _ChatComposerState extends State<ChatComposer> {
   void initState() {
     super.initState();
     _textCtrl.addListener(_onTextChanged);
+    if (widget.autofocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _focusNode.requestFocus();
+      });
+    }
   }
 
   @override
@@ -124,6 +133,7 @@ class _ChatComposerState extends State<ChatComposer> {
       _gifResults = [];
       _gifLoading = false;
     });
+    _focusNode.requestFocus();
   }
 
   void _sendGif(String mediaUrl) {
@@ -244,31 +254,31 @@ class _ChatComposerState extends State<ChatComposer> {
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   if (widget.onAttach != null) ...[
                     _ComposerIconButton(
-                      icon: Icons.attach_file,
+                      icon: PhosphorAssets.attach,
                       tooltip: 'Attach file',
                       onTap: widget.onAttach!,
                       colors: c,
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: 2),
                   ],
                   _ComposerIconButton(
-                    icon: Icons.emoji_emotions_outlined,
+                    icon: PhosphorAssets.smiley,
                     tooltip: 'Emoji',
                     onTap: _openEmojiPicker,
                     colors: c,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 2),
                   _ComposerIconButton(
-                    icon: Icons.gif_box_outlined,
+                    icon: PhosphorAssets.gif,
                     tooltip: 'GIF — or type @gif cats',
                     onTap: _openGifPicker,
                     colors: c,
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 8),
                   Expanded(child: _buildTextField(c)),
                   const SizedBox(width: 8),
                   _SendButton(hasText: _hasText, onSend: _send, colors: c),
@@ -330,8 +340,10 @@ class _ChatComposerState extends State<ChatComposer> {
                               width: 88,
                               height: 88,
                               color: c.surface,
-                              child: Icon(Icons.broken_image_outlined,
-                                  color: c.tertiary),
+                              child: PhosphorIcon(
+                                PhosphorAssets.imageBroken,
+                                color: c.tertiary,
+                              ),
                             ),
                           ),
                         ),
@@ -358,7 +370,8 @@ class _ChatComposerState extends State<ChatComposer> {
             style: TextStyle(color: c.primary, fontSize: 15, height: 1.35),
             cursorColor: c.accent,
             decoration: InputDecoration(
-              hintText: 'Message · Enter to send',
+              hintText:
+                  'Message · Enter to send · Shift+Enter for new line',
               hintStyle: TextStyle(color: c.tertiary, fontSize: 14),
               filled: false,
               isDense: true,
@@ -370,7 +383,7 @@ class _ChatComposerState extends State<ChatComposer> {
               focusedErrorBorder: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
-                vertical: 11,
+                vertical: 12,
               ),
             ),
           ),
@@ -382,7 +395,7 @@ class _ChatComposerState extends State<ChatComposer> {
 }
 
 class _ComposerIconButton extends StatelessWidget {
-  final IconData icon;
+  final String icon;
   final String tooltip;
   final VoidCallback onTap;
   final AppColors colors;
@@ -396,16 +409,19 @@ class _ComposerIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: () {
-        messengerHapticSelection();
-        onTap();
-      },
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      icon: Icon(icon, color: colors.secondary, size: 24),
-      padding: const EdgeInsets.all(8),
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: IconButton(
+        onPressed: () {
+          messengerHapticSelection();
+          onTap();
+        },
+        tooltip: tooltip,
+        visualDensity: VisualDensity.compact,
+        padding: EdgeInsets.zero,
+        icon: PhosphorIcon(icon, color: colors.secondary, size: 22),
+      ),
     );
   }
 }
@@ -438,10 +454,12 @@ class _SendButton extends StatelessWidget {
           child: SizedBox(
             width: 44,
             height: 44,
-            child: Icon(
-              Icons.arrow_upward_rounded,
-              color: hasText ? Colors.white : colors.tertiary,
-              size: 20,
+            child: Center(
+              child: PhosphorIcon(
+                PhosphorAssets.send,
+                color: hasText ? Colors.white : colors.tertiary,
+                size: 17,
+              ),
             ),
           ),
         ),
@@ -541,7 +559,10 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
                     cursorColor: c.accent,
                     decoration: InputDecoration(
                       hintText: 'Search GIFs',
-                      prefixIcon: Icon(Icons.search, color: c.tertiary),
+                      prefixIcon: PhosphorIcon.forInput(
+                        PhosphorAssets.search,
+                        color: c.tertiary,
+                      ),
                       filled: true,
                       fillColor: c.surfaceHigh,
                       border: OutlineInputBorder(
@@ -587,8 +608,10 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
                                       fit: BoxFit.cover,
                                       errorBuilder: (_, __, ___) => ColoredBox(
                                         color: c.surfaceHigh,
-                                        child: Icon(Icons.broken_image,
-                                            color: c.tertiary),
+                                        child: PhosphorIcon(
+                                          PhosphorAssets.imageBroken,
+                                          color: c.tertiary,
+                                        ),
                                       ),
                                     ),
                                   ),

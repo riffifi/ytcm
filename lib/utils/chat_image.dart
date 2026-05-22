@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
+import '../icons/phosphor_assets.dart';
 import '../theme.dart';
+import '../widgets/phosphor_icon.dart';
 
 /// Thumbnail sizing for chat bubbles — keeps decode work small while scrolling.
 class ChatImage {
@@ -56,8 +58,8 @@ class ChatImage {
               },
               errorBuilder: (_, __, ___) => ColoredBox(
                 color: colors.surfaceHigh,
-                child: Icon(
-                  Icons.broken_image_outlined,
+                child: PhosphorIcon(
+                  PhosphorAssets.imageBroken,
                   color: colors.secondary,
                 ),
               ),
@@ -85,8 +87,8 @@ class ChatImage {
               cacheHeight: cacheHeight(context),
               errorBuilder: (_, __, ___) => ColoredBox(
                 color: colors.surfaceHigh,
-                child: Icon(
-                  Icons.broken_image_outlined,
+                child: PhosphorIcon(
+                  PhosphorAssets.imageBroken,
                   color: colors.secondary,
                 ),
               ),
