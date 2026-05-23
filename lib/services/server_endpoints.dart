@@ -7,9 +7,9 @@ class ServerEndpoints {
   static const prefsKeyFile = 'server_file_url';
 
   /// Desktop-only defaults when nothing is saved yet.
-  static const desktopAuthDefault = 'http://127.0.0.1:25461';
-  static const desktopChatDefault = 'ws://127.0.0.1:25462/ws';
-  static const desktopFileDefault = 'ws://127.0.0.1:25463/ws';
+  static const desktopAuthDefault = 'https://auth.yechat.ru';
+  static const desktopChatDefault = 'wss://msg.yechat.ru/ws';
+  static const desktopFileDefault = 'wss://fl.yechat.ru/ws';
 
   static Future<({String? authUrl, String? chatUrl, String? fileUrl})>
       fromPrefs() async {
