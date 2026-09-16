@@ -60,28 +60,56 @@ class AuthService {
     required String phoneNumber,
   }) async {
     try {
+      if (email.trim().isEmpty && phoneNumber.trim().isEmpty) return false;
+      if (phoneNumber.trim().isEmpty) {
+        final uri = Uri.parse('$baseUrl/adduserwithoutphone').replace(
+          queryParameters: {
+            'username': username,
+            'email': email,
+            'password': password,
+          },
+        );
+        final res = await http.get(uri).timeout(const Duration(seconds: 15));
+        return res.statusCode == 200;
+      }
+      if (email.trim().isEmpty) {
+        final res = await http
+            .post(
+              Uri.parse('$baseUrl/adduserwithoutemail'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode({
+                'username': username,
+                'phone_number': phoneNumber,
+                'password': password,
+              }),
+            )
+            .timeout(const Duration(seconds: 15));
+        return res.statusCode == 200;
+      }
       final uri = Uri.parse('$baseUrl/adduser').replace(queryParameters: {
         'username': username,
         'email': email,
         'password': password,
         'phone_number': phoneNumber,
       });
-      final res =
-          await http.get(uri).timeout(const Duration(seconds: 15));
+      final res = await http.get(uri).timeout(const Duration(seconds: 15));
       return res.statusCode == 200;
     } catch (_) {
       return false;
     }
   }
 
-  /// Resolves a peer via /resolvepeer and GET /getuserinfo (auth API).
+  /// Resolves UUIDs directly and validates usernames via GET /getuserinfo.
   Future<({PeerLookupResult? result, PeerLookupFailure? failure})> lookupPeer({
     required String token,
     required String query,
   }) async {
     final normalized = _normalizeQuery(query);
     if (normalized.isEmpty) {
-      return (result: null, failure: const PeerLookupFailure('Enter a username'));
+      return (
+        result: null,
+        failure: const PeerLookupFailure('Enter a username')
+      );
     }
 
     if (_looksLikeUuid(normalized)) {
@@ -95,14 +123,6 @@ class AuthService {
     PeerLookupFailure? lastFailure;
     String? profileUsername;
 
-    for (final candidate in _queryCandidates(normalized)) {
-      final resolved = await _resolvePeerOnce(token: token, query: candidate);
-      if (resolved.result != null) {
-        return (result: resolved.result, failure: null);
-      }
-      lastFailure = resolved.failure ?? lastFailure;
-    }
-
     for (final candidate in _usernameCandidates(normalized)) {
       final attempt = await _getUserInfoOnce(token: token, username: candidate);
       if (attempt.result != null) {
@@ -113,22 +133,15 @@ class AuthService {
     }
 
     if (profileUsername != null) {
-      for (final candidate in _usernameCandidates(profileUsername)) {
-        final retry = await _resolvePeerOnce(token: token, query: candidate);
-        if (retry.result != null) {
-          return (result: retry.result, failure: null);
-        }
-        lastFailure = retry.failure ?? lastFailure;
-      }
-
-      // Auth confirmed the account; they do not need to be online. Chat server
-      // resolves username → UUID on send when /resolvepeer is unavailable.
+      // This backend's profile response intentionally does not expose UUIDs,
+      // and chat requires receiver_id to be a UUID. Never pass a username as
+      // receiver_id: the server would store an undeliverable message.
       return (
-        result: PeerLookupResult(
-          username: profileUsername,
-          uuid: profileUsername,
+        result: null,
+        failure: PeerLookupFailure(
+          'Found "$profileUsername", but the server does not expose their user ID. '
+          'Ask them for the ID shown in Profile, or start the chat while they are online.',
         ),
-        failure: null,
       );
     }
 
@@ -140,48 +153,6 @@ class AuthService {
             'and that Server settings → Auth URL matches where accounts were created.',
           ),
     );
-  }
-
-  Future<({PeerLookupResult? result, PeerLookupFailure? failure})> _resolvePeerOnce({
-    required String token,
-    required String query,
-  }) async {
-    try {
-      final uri = Uri.parse('$baseUrl/resolvepeer').replace(
-        queryParameters: {
-          'session_tocken': token,
-          'query': query,
-        },
-      );
-      final res = await http.get(uri).timeout(const Duration(seconds: 15));
-
-      if (res.statusCode == 404) {
-        return (result: null, failure: null);
-      }
-      if (res.statusCode == 401 || res.statusCode == 403) {
-        return (
-          result: null,
-          failure: const PeerLookupFailure('Session expired — sign in again'),
-        );
-      }
-      if (res.statusCode != 200) {
-        return (result: null, failure: null);
-      }
-
-      final parsed = _parsePeerJson(res.body, fallbackUsername: query);
-      if (parsed == null) {
-        return (
-          result: null,
-          failure: const PeerLookupFailure('Auth server returned no user UUID'),
-        );
-      }
-      return (result: parsed, failure: null);
-    } catch (e) {
-      return (
-        result: null,
-        failure: PeerLookupFailure('Cannot reach auth server: $e'),
-      );
-    }
   }
 
   String _normalizeQuery(String raw) {
@@ -212,23 +183,6 @@ class AuthService {
     return out;
   }
 
-  List<String> _queryCandidates(String query) {
-    final seen = <String>{};
-    final out = <String>[];
-    void add(String s) {
-      if (s.isNotEmpty && seen.add(s)) out.add(s);
-    }
-
-    add(query);
-    add(query.toLowerCase());
-    if (query.contains('@')) {
-      final local = query.split('@').first.trim();
-      add(local);
-      add(local.toLowerCase());
-    }
-    return out;
-  }
-
   Future<
       ({
         PeerLookupResult? result,
@@ -245,8 +199,7 @@ class AuthService {
           'username': username,
         },
       );
-      final res =
-          await http.get(uri).timeout(const Duration(seconds: 15));
+      final res = await http.get(uri).timeout(const Duration(seconds: 15));
 
       if (res.statusCode == 404) {
         return (result: null, failure: null, profileUsername: null);
@@ -312,33 +265,6 @@ class AuthService {
         failure: PeerLookupFailure('Cannot reach auth server: $e'),
         profileUsername: null,
       );
-    }
-  }
-
-  PeerLookupResult? _parsePeerJson(String body, {required String fallbackUsername}) {
-    final trimmed = body.trim();
-    if (!trimmed.startsWith('{')) {
-      final uuid = _uuidFromRawBody(trimmed);
-      if (uuid == null) return null;
-      return PeerLookupResult(username: fallbackUsername, uuid: uuid);
-    }
-
-    try {
-      final json = jsonDecode(trimmed);
-      if (json is! Map<String, dynamic>) return null;
-      final uuid = _readUuid(json) ?? _uuidFromRawBody(trimmed);
-      if (uuid == null) return null;
-      final username = (json['username'] as String?)?.trim();
-      return PeerLookupResult(
-        username: (username != null && username.isNotEmpty)
-            ? username
-            : fallbackUsername,
-        uuid: uuid,
-      );
-    } catch (_) {
-      final uuid = _uuidFromRawBody(trimmed);
-      if (uuid == null) return null;
-      return PeerLookupResult(username: fallbackUsername, uuid: uuid);
     }
   }
 
@@ -416,34 +342,13 @@ class AuthService {
     try {
       final uri = Uri.parse(baseUrl);
       final res = await http.get(uri).timeout(const Duration(seconds: 8));
+      if (res.statusCode == 502 || res.statusCode == 503) {
+        return 'Server gateway error (HTTP ${res.statusCode}). '
+            'The reverse proxy is online, but auth-service is unavailable.';
+      }
       return 'Reachable (HTTP ${res.statusCode})';
     } catch (e) {
       return 'Failed: $e';
-    }
-  }
-
-  /// Checks whether /resolvepeer exists on this auth deployment.
-  Future<String> pingResolvePeer(String token) async {
-    try {
-      final uri = Uri.parse('$baseUrl/resolvepeer').replace(
-        queryParameters: {
-          'session_tocken': token,
-          'query': 'test-nonexistent-user-xyz',
-        },
-      );
-      final res = await http.get(uri).timeout(const Duration(seconds: 8));
-      if (res.statusCode == 404) {
-        return 'resolvepeer available (404 = user not found, route exists)';
-      }
-      if (res.statusCode == 200) {
-        return 'resolvepeer available';
-      }
-      if (res.statusCode == 401) {
-        return 'resolvepeer available (session check)';
-      }
-      return 'resolvepeer HTTP ${res.statusCode}';
-    } catch (e) {
-      return 'resolvepeer not reachable: $e';
     }
   }
 
@@ -474,8 +379,7 @@ class AuthService {
         'session_tocken': token,
         'new_value': newUsername,
       });
-      final res =
-          await http.get(uri).timeout(const Duration(seconds: 10));
+      final res = await http.get(uri).timeout(const Duration(seconds: 10));
       return res.statusCode == 200;
     } catch (_) {
       return false;
@@ -512,6 +416,21 @@ class AuthService {
     }
   }
 
+  Future<bool> changeDateOfBirth(String token, String value) async {
+    try {
+      final res = await http
+          .post(
+            Uri.parse('$baseUrl/changedateofbirth'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'session_tocken': token, 'new_value': value}),
+          )
+          .timeout(const Duration(seconds: 10));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<bool> changeAdditionalInfo(String token, String value) async {
     try {
       final res = await http
@@ -537,22 +456,15 @@ class AuthService {
 
     if (_looksLikeUuid(normalized)) {
       final uuid = _normalizeUuid(normalized);
-      final resolved = await _resolvePeerOnce(token: token, query: uuid);
-      if (resolved.result != null) {
-        return resolved.result;
-      }
       return PeerLookupResult(username: uuid, uuid: uuid);
     }
-
-    final byName = await _resolvePeerOnce(token: token, query: normalized);
-    if (byName.result != null) return byName.result;
 
     for (final candidate in _usernameCandidates(normalized)) {
       final attempt = await _getUserInfoOnce(token: token, username: candidate);
       if (attempt.result != null) return attempt.result;
     }
 
-    return PeerLookupResult(username: normalized, uuid: normalized);
+    return null;
   }
 
   /// Full profile from GET /getuserinfo (username lookup).
@@ -568,8 +480,7 @@ class AuthService {
           'username': username,
         },
       );
-      final res =
-          await http.get(uri).timeout(const Duration(seconds: 15));
+      final res = await http.get(uri).timeout(const Duration(seconds: 15));
       if (res.statusCode != 200) return null;
 
       final body = res.body.trim();

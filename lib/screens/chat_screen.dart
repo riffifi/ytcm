@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
@@ -15,6 +16,8 @@ import 'user_profile_screen.dart';
 import '../widgets/chat_composer.dart';
 import '../utils/scroll_utils.dart';
 import '../widgets/chat_message_tile.dart';
+import '../widgets/connection_banner.dart';
+import '../widgets/upload_progress_banner.dart';
 
 class _ChatListSnapshot {
   final List<Message> messages;
@@ -56,6 +59,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollCtrl = ScrollController();
   int _trackedCount = 0;
   int _trackedFingerprint = 0;
+
   /// Message count before the current frame (for enter animations).
   int _previousMessageCount = 0;
   bool _scrollPending = false;
@@ -150,6 +154,48 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  Future<void> _showMessageActions(Message message, bool isMe) async {
+    messengerHapticSelection();
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (message.text?.trim().isNotEmpty == true)
+              ListTile(
+                leading: const Icon(Icons.copy_outlined),
+                title: const Text('Copy text'),
+                onTap: () => Navigator.pop(sheetContext, 'copy'),
+              ),
+            if (!message.uuid.startsWith('local-'))
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete for me'),
+                onTap: () => Navigator.pop(sheetContext, 'delete_me'),
+              ),
+            if (isMe && !message.uuid.startsWith('local-'))
+              ListTile(
+                leading: const Icon(Icons.delete_forever_outlined),
+                title: const Text('Delete for everyone'),
+                onTap: () => Navigator.pop(sheetContext, 'delete_everyone'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: message.text!.trim()));
+      if (mounted) showMessengerSnackBar(context, 'Message copied');
+      return;
+    }
+    context.read<AppState>().deleteMessage(
+          message,
+          forEveryone: action == 'delete_everyone',
+        );
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.mc;
@@ -162,6 +208,21 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: _buildAppBar(context, c, peerId),
       body: Column(
         children: [
+          Selector<AppState, ({bool connected, String? status})>(
+            selector: (_, state) => (
+              connected: state.chat.isConnected,
+              status: state.chatStatus,
+            ),
+            builder: (_, connection, __) => ConnectionBanner(
+              connected: connection.connected,
+              message: connection.status,
+            ),
+          ),
+          Selector<AppState, double?>(
+            selector: (_, state) => state.uploadProgress,
+            builder: (_, progress, __) =>
+                UploadProgressBanner(progress: progress),
+          ),
           Expanded(
             child: Align(
               alignment: Alignment.topCenter,
@@ -200,15 +261,15 @@ class _ChatScreenState extends State<ChatScreen> {
                           controller: _scrollCtrl,
                           keyboardDismissBehavior:
                               ScrollViewKeyboardDismissBehavior.onDrag,
-                          cacheExtent: 280,
                           addAutomaticKeepAlives: false,
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
+                            horizontal: 18,
+                            vertical: 18,
                           ),
                           itemCount: snap.messages.length,
                           itemBuilder: (context, i) {
                             final msg = snap.messages[i];
+                            final isMe = msg.senderId == meId;
                             final showDate = i == 0 ||
                                 !sameChatDay(
                                   snap.messages[i - 1].createdAt,
@@ -217,7 +278,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             return ChatMessageTile(
                               key: ValueKey(msg.uuid),
                               message: msg,
-                              isMe: msg.senderId == meId,
+                              isMe: isMe,
                               showDate: showDate,
                               animate: shouldAnimateChatMessage(
                                 message: msg,
@@ -227,6 +288,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                               colors: c,
                               maxBubbleWidth: maxW,
+                              onLongPress: () => _showMessageActions(msg, isMe),
                             );
                           },
                         ),
@@ -255,15 +317,15 @@ class _ChatScreenState extends State<ChatScreen> {
     final id = peerId ?? '';
     final name = id.isNotEmpty ? state.peerDisplayName(id) : 'Chat';
     final profile = id.isNotEmpty ? state.peerProfile(id) : null;
-    final initial = profile?.initials ??
-        (name.isNotEmpty ? name[0].toUpperCase() : '?');
+    final initial =
+        profile?.initials ?? (name.isNotEmpty ? name[0].toUpperCase() : '?');
     final extras = state.peerExtras(id);
     final online = state.isPeerOnline(id);
 
     return AppBar(
       centerTitle: false,
       titleSpacing: 0,
-      toolbarHeight: 52,
+      toolbarHeight: 66,
       leading: widget.embedded
           ? (widget.onClose != null
               ? IconButton(

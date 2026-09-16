@@ -16,6 +16,7 @@ class ChatMessageTile extends StatelessWidget {
   final bool animate;
   final AppColors colors;
   final double maxBubbleWidth;
+  final VoidCallback? onLongPress;
 
   const ChatMessageTile({
     super.key,
@@ -25,6 +26,7 @@ class ChatMessageTile extends StatelessWidget {
     this.animate = false,
     required this.colors,
     required this.maxBubbleWidth,
+    this.onLongPress,
   });
 
   @override
@@ -35,10 +37,13 @@ class ChatMessageTile extends StatelessWidget {
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-          child: _Bubble(
-            message: message,
-            isMe: isMe,
-            colors: colors,
+          child: GestureDetector(
+            onLongPress: onLongPress,
+            child: _Bubble(
+              message: message,
+              isMe: isMe,
+              colors: colors,
+            ),
           ),
         ),
       ),
@@ -113,8 +118,7 @@ class _MessageEnterAnimationState extends State<_MessageEnterAnimation>
         position: _slide,
         child: ScaleTransition(
           scale: _scale,
-          alignment:
-              widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
+          alignment: widget.isMe ? Alignment.centerRight : Alignment.centerLeft,
           child: widget.child,
         ),
       ),
@@ -136,24 +140,30 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final time = DateFormat('HH:mm').format(message.createdAt);
-    final hasFile =
-        message.fileId != null && message.fileId!.isNotEmpty;
+    final hasFile = message.fileId != null && message.fileId!.isNotEmpty;
     final text = message.text?.trim();
     final hasText = text != null && text.isNotEmpty;
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
       decoration: BoxDecoration(
         color: isMe ? colors.bubbleOut : colors.bubbleIn,
         borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(18),
-          topRight: const Radius.circular(18),
-          bottomLeft: Radius.circular(isMe ? 18 : 6),
-          bottomRight: Radius.circular(isMe ? 6 : 18),
+          topLeft: const Radius.circular(20),
+          topRight: const Radius.circular(20),
+          bottomLeft: Radius.circular(isMe ? 20 : 7),
+          bottomRight: Radius.circular(isMe ? 7 : 20),
         ),
         border: Border.all(
           color: isMe ? colors.bubbleOutBorder : colors.bubbleInBorder,
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment:
@@ -242,9 +252,10 @@ class _DateDivider extends StatelessWidget {
         date.month == now.month &&
         date.day == now.day) {
       label = 'Today';
-    } else if (date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day - 1) {
+    } else if (DateTime(now.year, now.month, now.day)
+            .difference(DateTime(date.year, date.month, date.day))
+            .inDays ==
+        1) {
       label = 'Yesterday';
     } else {
       label = DateFormat('MMMM d').format(date);

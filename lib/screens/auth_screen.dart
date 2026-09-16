@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../icons/phosphor_assets.dart';
 import '../services/app_state.dart';
 import '../services/server_settings.dart';
-import '../icons/phosphor_assets.dart';
 import '../theme.dart';
 import '../widgets/phosphor_icon.dart';
 import 'server_settings_screen.dart';
@@ -16,221 +17,181 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen>
     with SingleTickerProviderStateMixin {
-  late TabController _tab;
-  final _loginCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  final _usernameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _regPassCtrl = TextEditingController();
-  bool _obscure = true;
-  bool _obscureReg = true;
+  late final TabController _tabs;
+  final _login = TextEditingController();
+  final _password = TextEditingController();
+  final _username = TextEditingController();
+  final _email = TextEditingController();
+  final _phone = TextEditingController();
+  final _registerPassword = TextEditingController();
+  bool _hidePassword = true;
+  bool _hideRegisterPassword = true;
   String _loginType = 'email';
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 2, vsync: this);
+    _tabs = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
-    _tab.dispose();
-    _loginCtrl.dispose();
-    _passCtrl.dispose();
-    _usernameCtrl.dispose();
-    _emailCtrl.dispose();
-    _phoneCtrl.dispose();
-    _regPassCtrl.dispose();
+    _tabs.dispose();
+    _login.dispose();
+    _password.dispose();
+    _username.dispose();
+    _email.dispose();
+    _phone.dispose();
+    _registerPassword.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final width = MediaQuery.of(context).size.width;
-
-    if (width >= 900) {
-      return _desktopLayout(context, state);
-    } else if (width >= 600) {
-      return _tabletLayout(context, state);
-    } else {
-      return _phoneLayout(context, state);
-    }
+    final desktop = MediaQuery.sizeOf(context).width >= 860;
+    return Scaffold(
+      body: DecoratedBox(
+        decoration: _backdrop(context),
+        child: SafeArea(
+          child: desktop
+              ? Row(
+                  children: [
+                    const Expanded(flex: 5, child: _BrandPanel()),
+                    Expanded(
+                      flex: 4,
+                      child: Center(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(48),
+                          child: _card(context, state),
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+                  child: Column(
+                    children: [
+                      const _BrandPanel(compact: true),
+                      const SizedBox(height: 28),
+                      _card(context, state),
+                    ],
+                  ),
+                ),
+        ),
+      ),
+    );
   }
 
-  // ─── Phone layout ────────────────────────────────────────────────────────────
+  BoxDecoration _backdrop(BuildContext context) {
+    final c = context.mc;
+    return BoxDecoration(
+      color: c.bg,
+      gradient: RadialGradient(
+        center: const Alignment(-0.9, -0.9),
+        radius: 1.3,
+        colors: [
+          c.accent.withValues(alpha: 0.18),
+          c.accentDim.withValues(alpha: 0.08),
+          c.bg,
+        ],
+      ),
+    );
+  }
 
-  Widget _phoneLayout(BuildContext context, AppState state) {
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _card(BuildContext context, AppState state) {
+    final c = context.mc;
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 470),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: c.surface.withValues(alpha: 0.97),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: c.borderSoft),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 42,
+            offset: const Offset(0, 18),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
             children: [
-              const SizedBox(height: 56),
-              _brandHeader(context),
-              const SizedBox(height: 40),
-              _buildTabBar(context),
-              const SizedBox(height: 28),
               Expanded(
-                child: TabBarView(
-                  controller: _tab,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _loginForm(context, state),
-                    _registerForm(context, state),
+                    Text('Welcome', style: AppTheme.heading(c, fontSize: 25)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Sign in or create your account.',
+                      style: AppTheme.text(c, color: c.secondary, fontSize: 13),
+                    ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─── Tablet layout ───────────────────────────────────────────────────────────
-
-  Widget _tabletLayout(BuildContext context, AppState state) {
-    final c = context.mc;
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 520),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _brandHeader(context),
-                  const SizedBox(height: 48),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: c.surfaceHigh,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: c.border),
-                    ),
-                    padding: const EdgeInsets.all(28),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildTabBar(context),
-                        const SizedBox(height: 28),
-                        SizedBox(
-                          height: 420,
-                          child: TabBarView(
-                            controller: _tab,
-                            children: [
-                              _loginForm(context, state),
-                              _registerForm(context, state),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─── Desktop layout ──────────────────────────────────────────────────────────
-
-  Widget _desktopLayout(BuildContext context, AppState state) {
-    final c = context.mc;
-    return Scaffold(
-      body: Row(
-        children: [
-          // Left branding panel
-          Expanded(
-            flex: 5,
-            child: Container(
-              color: c.surface,
-              padding: const EdgeInsets.symmetric(horizontal: 64, vertical: 56),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'YTCm',
-                    style: AppTheme.display(c, fontSize: 52).copyWith(
-                      letterSpacing: -0.08,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Minimal. Secure. Fast.',
-                    style: AppTheme.text(
-                      c,
-                      fontSize: 18,
-                      color: c.secondary,
-                      wght: 420,
-                      letterSpacing: 0.02,
-                    ),
-                  ),
-                  const SizedBox(height: 48),
-                  _featurePill(
+              Consumer<ServerSettings>(
+                builder: (_, settings, __) => IconButton.filledTonal(
+                  tooltip: settings.authUrl.isEmpty
+                      ? 'Configure server'
+                      : Uri.tryParse(settings.authUrl)?.host ??
+                          'Server settings',
+                  onPressed: () => Navigator.push(
                     context,
-                    PhosphorAssets.lock,
-                    'End-to-end encrypted',
-                  ),
-                  const SizedBox(height: 12),
-                  _featurePill(
-                    context,
-                    PhosphorAssets.bolt,
-                    'Real-time messaging',
-                  ),
-                  const SizedBox(height: 12),
-                  _featurePill(
-                    context,
-                    PhosphorAssets.devices,
-                    'Cross-platform',
-                  ),
-                  const Spacer(),
-                  _serverBadge(context),
-                ],
-              ),
-            ),
-          ),
-          // Divider
-          Container(width: 1, color: c.border),
-          // Right form panel
-          Expanded(
-            flex: 4,
-            child: Container(
-              color: c.surfaceHigh,
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 400),
-                  child: Padding(
-                    padding: const EdgeInsets.all(48),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildTabBar(context),
-                        const SizedBox(height: 32),
-                        SizedBox(
-                          height: 440,
-                          child: TabBarView(
-                            controller: _tab,
-                            children: [
-                              _loginForm(context, state),
-                              _registerForm(context, state),
-                            ],
-                          ),
-                        ),
-                      ],
+                    MaterialPageRoute(
+                      builder: (_) => const ServerSettingsScreen(),
                     ),
+                  ),
+                  style: IconButton.styleFrom(backgroundColor: c.accentSoft),
+                  icon: PhosphorIcon(
+                    PhosphorAssets.server,
+                    color: c.accent,
+                    size: 20,
                   ),
                 ),
               ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Container(
+            height: 46,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: c.surfaceHigh,
+              borderRadius: BorderRadius.circular(15),
+            ),
+            child: TabBar(
+              controller: _tabs,
+              dividerColor: Colors.transparent,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicator: BoxDecoration(
+                color: c.surface,
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              labelColor: c.primary,
+              unselectedLabelColor: c.tertiary,
+              tabs: const [Tab(text: 'Sign in'), Tab(text: 'Create account')],
+            ),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            height: 430,
+            child: TabBarView(
+              controller: _tabs,
+              children: [_loginForm(state), _registerForm(state)],
             ),
           ),
         ],
@@ -238,374 +199,324 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
-  Widget _featurePill(BuildContext context, String icon, String label) {
-    final c = context.mc;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: c.accentSoft,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: PhosphorIcon(icon, color: c.accent, size: 16),
-        ),
-        const SizedBox(width: 12),
-        Text(label,
-            style: TextStyle(
-                color: c.secondary, fontSize: 14)),
-      ],
-    );
-  }
-
-  Widget _serverBadge(BuildContext context) {
-    final c = context.mc;
-    return Consumer<ServerSettings>(
-      builder: (_, s, __) => GestureDetector(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ServerSettingsScreen()),
-        ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: c.surface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: c.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              PhosphorIcon(
-                PhosphorAssets.server,
-                color: c.secondary,
-                size: 14,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                _hostOnly(s.authUrl),
-                style: TextStyle(
-                    color: c.secondary, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ─── Shared header (phone / tablet) ──────────────────────────────────────────
-
-  Widget _brandHeader(BuildContext context) {
-    final c = context.mc;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Messenger',
-              style: Theme.of(context).textTheme.displayLarge,
-            ),
-            const SizedBox(height: 4),
-            Text('Minimal. Secure. Fast.',
-                style: Theme.of(context).textTheme.bodyMedium),
-          ],
-        ),
-        GestureDetector(
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => const ServerSettingsScreen()),
-          ),
-          child: Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: c.surfaceHigh,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: c.border),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                PhosphorIcon(
-                  PhosphorAssets.server,
-                  color: c.secondary,
-                  size: 13,
-                ),
-                const SizedBox(width: 5),
-                Consumer<ServerSettings>(
-                  builder: (_, s, __) => Text(
-                    _hostOnly(s.authUrl),
-                    style: TextStyle(
-                      color: c.secondary,
-                      fontSize: 11,
-                    ),
-                  ), // ← FIX: was missing closing ) for Text(
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ─── Tab bar ─────────────────────────────────────────────────────────────────
-
-  Widget _buildTabBar(BuildContext context) {
-    final c = context.mc;
-    return Container(
-      height: 40,
-      decoration: BoxDecoration(
-        color: c.surfaceHigh,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: TabBar(
-        controller: _tab,
-        dividerColor: Colors.transparent,
-        indicator: BoxDecoration(
-          color: c.accent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        labelColor: Colors.white,
-        unselectedLabelColor: c.secondary,
-        labelStyle:
-            const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-        tabs: const [Tab(text: 'Sign in'), Tab(text: 'Register')],
-      ),
-    );
-  }
-
-  // ─── Login form ───────────────────────────────────────────────────────────────
-
-  Widget _loginForm(BuildContext context, AppState state) {
+  Widget _loginForm(AppState state) {
     final c = context.mc;
     return SingleChildScrollView(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: ['email', 'phone'].map((t) {
-              final selected = _loginType == t;
-              return GestureDetector(
-                onTap: () => setState(() => _loginType = t),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  margin: const EdgeInsets.only(right: 8),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? c.accentSoft
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                        color: selected
-                            ? c.accent
-                            : c.border),
-                  ),
-                  child: Text(
-                    t == 'email' ? 'Email' : 'Phone',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: selected
-                          ? c.accent
-                          : c.secondary,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
+          Text('SIGN IN WITH', style: AppTheme.sectionLabel(c)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            children: [
+              _loginChip('Email', 'email'),
+              _loginChip('Phone', 'phone'),
+            ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           TextField(
-            controller: _loginCtrl,
+            controller: _login,
             keyboardType: _loginType == 'email'
                 ? TextInputType.emailAddress
                 : TextInputType.phone,
-            style: TextStyle(color: c.primary, fontSize: 15),
+            autofillHints: _loginType == 'email'
+                ? const [AutofillHints.email]
+                : const [AutofillHints.telephoneNumber],
             decoration: InputDecoration(
-              hintText: _loginType == 'email' ? 'Email' : 'Phone number',
+              labelText: _loginType == 'email' ? 'Email address' : 'Phone',
+              prefixIcon: const Icon(Icons.alternate_email_rounded, size: 20),
             ),
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _passCtrl,
-            obscureText: _obscure,
-            style: TextStyle(color: c.primary, fontSize: 15),
-            decoration: InputDecoration(
-              hintText: 'Password',
-              suffixIcon: GestureDetector(
-                onTap: () => setState(() => _obscure = !_obscure),
-                child: PhosphorIcon.forInput(
-                  _obscure ? PhosphorAssets.eyeSlash : PhosphorAssets.eye,
-                  color: c.secondary,
-                ),
-              ),
-            ),
+          const SizedBox(height: 14),
+          _passwordField(
+            controller: _password,
+            hidden: _hidePassword,
+            onToggle: () => setState(() => _hidePassword = !_hidePassword),
+            onSubmitted: _signIn,
           ),
           if (state.error != null) ...[
-            const SizedBox(height: 12),
-            _errorBanner(context, state.error!),
+            const SizedBox(height: 14),
+            _ErrorNotice(state.error!),
           ],
-          const SizedBox(height: 24),
-          state.loading
-              ? _loadingButton(context)
-              : ElevatedButton(
-                  onPressed: () async {
-                    await context.read<AppState>().login(
-                          _loginCtrl.text.trim(),
-                          _passCtrl.text,
-                          loginType: _loginType,
-                        );
-                  },
-                  child: const Text('Sign in'),
-                ),
+          const SizedBox(height: 22),
+          _PrimaryAction(
+            loading: state.loading,
+            label: 'Continue to YeChat',
+            onPressed: _signIn,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Your connection details stay on this device.',
+            textAlign: TextAlign.center,
+            style: AppTheme.text(c, color: c.tertiary, fontSize: 11),
+          ),
         ],
       ),
     );
   }
 
-  // ─── Register form ────────────────────────────────────────────────────────────
-
-  Widget _registerForm(BuildContext context, AppState state) {
-    final c = context.mc;
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          TextField(
-            controller: _usernameCtrl,
-            style: TextStyle(color: c.primary, fontSize: 15),
-            decoration: const InputDecoration(hintText: 'Username'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _emailCtrl,
-            keyboardType: TextInputType.emailAddress,
-            style: TextStyle(color: c.primary, fontSize: 15),
-            decoration: const InputDecoration(hintText: 'Email'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _phoneCtrl,
-            keyboardType: TextInputType.phone,
-            style: TextStyle(color: c.primary, fontSize: 15),
-            decoration: const InputDecoration(hintText: 'Phone number'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _regPassCtrl,
-            obscureText: _obscureReg,
-            style: TextStyle(color: c.primary, fontSize: 15),
-            decoration: InputDecoration(
-              hintText: 'Password',
-              suffixIcon: GestureDetector(
-                onTap: () =>
-                    setState(() => _obscureReg = !_obscureReg),
-                child: PhosphorIcon.forInput(
-                  _obscureReg ? PhosphorAssets.eyeSlash : PhosphorAssets.eye,
-                  color: c.secondary,
-                ),
+  Widget _registerForm(AppState state) => SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _field(_username, 'Username', PhosphorAssets.user),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _email,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Email (optional)',
+                prefixIcon: Icon(Icons.alternate_email_rounded, size: 20),
               ),
             ),
-          ),
-          if (state.error != null) ...[
             const SizedBox(height: 12),
-            _errorBanner(context, state.error!),
+            TextField(
+              controller: _phone,
+              keyboardType: TextInputType.phone,
+              decoration: const InputDecoration(
+                labelText: 'Phone (optional)',
+                prefixIcon: Icon(Icons.phone_outlined, size: 20),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _passwordField(
+              controller: _registerPassword,
+              hidden: _hideRegisterPassword,
+              onToggle: () => setState(
+                () => _hideRegisterPassword = !_hideRegisterPassword,
+              ),
+              onSubmitted: _register,
+            ),
+            if (state.error != null) ...[
+              const SizedBox(height: 12),
+              _ErrorNotice(state.error!),
+            ],
+            const SizedBox(height: 18),
+            _PrimaryAction(
+              loading: state.loading,
+              label: 'Create my account',
+              onPressed: _register,
+            ),
           ],
-          const SizedBox(height: 24),
-          state.loading
-              ? _loadingButton(context)
-              : ElevatedButton(
-                  onPressed: () async {
-                    final ok =
-                        await context.read<AppState>().register(
-                              username: _usernameCtrl.text.trim(),
-                              email: _emailCtrl.text.trim(),
-                              password: _regPassCtrl.text,
-                              phone: _phoneCtrl.text.trim(),
-                            );
-                    if (ok && mounted) {
-                      _tab.animateTo(0);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Account created — sign in now',
-                            style: TextStyle(color: c.primary),
-                          ),
-                          backgroundColor: c.surfaceHigh,
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Create account'),
-                ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-  Widget _errorBanner(BuildContext context, String msg) {
-    final c = context.mc;
-    return Container(
-      width: double.infinity,
-      padding:
-          const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: c.error.withValues(alpha: 0.1),   // FIX: was withOpacity
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: c.error.withValues(alpha: 0.3)),         // FIX: was withOpacity
-      ),
-      child: Text(msg,
-          style: TextStyle(color: c.error, fontSize: 13)),
-    );
-  }
-
-  Widget _loadingButton(BuildContext context) {
-    final c = context.mc;
-    return Container(
-      height: 50,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: c.accent.withValues(alpha: 0.5),             // FIX: was withOpacity
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Center(
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-              strokeWidth: 2, color: Colors.white),
         ),
+      );
+
+  Widget _field(TextEditingController controller, String label, String icon) =>
+      TextField(
+        controller: controller,
+        autocorrect: false,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: PhosphorIcon(icon, size: 20),
+        ),
+      );
+
+  Widget _passwordField({
+    required TextEditingController controller,
+    required bool hidden,
+    required VoidCallback onToggle,
+    required VoidCallback onSubmitted,
+  }) =>
+      TextField(
+        controller: controller,
+        obscureText: hidden,
+        autofillHints: const [AutofillHints.password],
+        textInputAction: TextInputAction.done,
+        onSubmitted: (_) => onSubmitted(),
+        decoration: InputDecoration(
+          labelText: 'Password',
+          prefixIcon: const PhosphorIcon(PhosphorAssets.lock, size: 20),
+          suffixIcon: IconButton(
+            onPressed: onToggle,
+            icon: PhosphorIcon(
+              hidden ? PhosphorAssets.eye : PhosphorAssets.eyeSlash,
+              size: 20,
+            ),
+          ),
+        ),
+      );
+
+  Widget _loginChip(String label, String value) {
+    final selected = _loginType == value;
+    final c = context.mc;
+    return ChoiceChip(
+      selected: selected,
+      showCheckmark: false,
+      label: Text(label),
+      onSelected: (_) => setState(() => _loginType = value),
+      labelStyle: AppTheme.text(
+        c,
+        color: selected ? c.accent : c.secondary,
+        fontSize: 13,
+        wght: AppFontWeight.semibold,
       ),
     );
   }
 
-  String _hostOnly(String url) {
-    final trimmed = url.trim();
-    if (trimmed.isEmpty) return 'Not set';
+  void _signIn() => context.read<AppState>().login(
+        _login.text.trim(),
+        _password.text,
+        loginType: _loginType,
+      );
 
-    try {
-      var uri = Uri.parse(trimmed);
-      if (!uri.hasScheme && uri.host.isEmpty) {
-        uri = Uri.parse('http://$trimmed');
-      }
-      if (uri.host.isNotEmpty) {
-        final port = uri.hasPort ? ':${uri.port}' : '';
-        return '${uri.host}$port';
-      }
-    } catch (_) {}
-
-    return trimmed;
+  Future<void> _register() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await context.read<AppState>().register(
+          username: _username.text.trim(),
+          email: _email.text.trim(),
+          password: _registerPassword.text,
+          phone: _phone.text.trim(),
+        );
+    if (!mounted || !ok) return;
+    _tabs.animateTo(0);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Account created. You can sign in now.')),
+    );
   }
+}
+
+class _BrandPanel extends StatelessWidget {
+  final bool compact;
+  const _BrandPanel({this.compact = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.mc;
+    final content = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment:
+          compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: compact ? 72 : 104,
+          height: compact ? 72 : 104,
+          padding: const EdgeInsets.all(5),
+          decoration: BoxDecoration(
+            color: c.surface,
+            borderRadius: BorderRadius.circular(compact ? 22 : 30),
+            border: Border.all(color: c.borderSoft),
+            boxShadow: [
+              BoxShadow(
+                color: c.accent.withValues(alpha: 0.22),
+                blurRadius: 42,
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(compact ? 18 : 25),
+            child: Image.asset('assets/icon/app_icon.png', fit: BoxFit.cover),
+          ),
+        ),
+        SizedBox(height: compact ? 16 : 30),
+        Text('YeChat', style: AppTheme.display(c, fontSize: compact ? 36 : 58)),
+        const SizedBox(height: 10),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480),
+          child: Text(
+            'Conversations that feel close, even when people are far away.',
+            textAlign: compact ? TextAlign.center : TextAlign.left,
+            style: AppTheme.text(
+              c,
+              color: c.secondary,
+              fontSize: compact ? 15 : 20,
+              height: 1.45,
+            ),
+          ),
+        ),
+        if (!compact) ...[
+          const SizedBox(height: 36),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              _feature(c, PhosphorAssets.bolt, 'Real time'),
+              _feature(c, PhosphorAssets.lock, 'Private'),
+              _feature(c, PhosphorAssets.devices, 'Everywhere'),
+            ],
+          ),
+        ],
+      ],
+    );
+    return compact
+        ? content
+        : Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 72, vertical: 56),
+            child: Align(alignment: Alignment.centerLeft, child: content),
+          );
+  }
+
+  Widget _feature(AppColors c, String icon, String label) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: c.surface.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: c.borderSoft),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            PhosphorIcon(icon, color: c.accent, size: 17),
+            const SizedBox(width: 8),
+            Text(label, style: AppTheme.text(c, fontSize: 13)),
+          ],
+        ),
+      );
+}
+
+class _ErrorNotice extends StatelessWidget {
+  final String message;
+  const _ErrorNotice(this.message);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.mc;
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: c.error.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: c.error.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PhosphorIcon(PhosphorAssets.warningCircle, color: c.error, size: 18),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: AppTheme.text(c, color: c.error, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PrimaryAction extends StatelessWidget {
+  final bool loading;
+  final String label;
+  final VoidCallback onPressed;
+  const _PrimaryAction({
+    required this.loading,
+    required this.label,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) => ElevatedButton(
+        onPressed: loading ? null : onPressed,
+        child: loading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : Text(label),
+      );
 }

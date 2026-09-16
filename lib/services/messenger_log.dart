@@ -54,8 +54,7 @@ class MessengerLog extends ChangeNotifier {
   String? get banner => _banner;
   bool get isEmpty => _entries.isEmpty;
   bool get hasErrors => _entries.any((e) => e.level == LogLevel.error);
-  bool get hasWarnings =>
-      _entries.any((e) => e.level == LogLevel.warn);
+  bool get hasWarnings => _entries.any((e) => e.level == LogLevel.warn);
 
   LogLevel? get bannerLevel {
     if (_entries.isEmpty) return null;

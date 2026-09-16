@@ -9,12 +9,11 @@ import '../models/group_models.dart';
 import '../models/messenger_file.dart';
 import '../services/auth_service.dart';
 import '../services/background_messaging.dart';
+import '../services/background_state.dart';
 import '../services/background_sync.dart';
-import '../services/notification_preferences.dart';
 import '../services/chat_service.dart';
 import '../services/file_metadata_cache.dart';
 import '../services/file_service.dart';
-import '../services/message_listener_service.dart';
 import '../services/conversation_store.dart';
 import '../services/message_cache.dart';
 import '../services/notification_service.dart';
@@ -34,6 +33,7 @@ class AppState extends ChangeNotifier {
   final FileMetadataCache _fileMetadataCache = FileMetadataCache();
   Timer? _persistDebounce;
   Timer? _presenceTimer;
+  Timer? _reconnectTimer;
 
   String? _token;
   UserInfo? _me;
@@ -41,6 +41,7 @@ class AppState extends ChangeNotifier {
   bool _sessionChecked = false;
   String? _error;
   String? _chatStatus;
+  double? _uploadProgress;
 
   final Map<String, List<Message>> _conversations = {};
   final Map<String, List<GroupMessage>> _groupConversations = {};
@@ -64,7 +65,12 @@ class AppState extends ChangeNotifier {
   StreamSubscription<GroupMessage>? _groupMsgSub;
   StreamSubscription<Map<String, List<GroupMessage>>>? _groupHistorySub;
   StreamSubscription<ChatGroup>? _groupCreatedSub;
-  StreamSubscription<List<String>>? _dialogPeersSub;
+  StreamSubscription<bool>? _connectionStateSub;
+  StreamSubscription<ChatGroup>? _groupUpdatedSub;
+  StreamSubscription<String>? _groupDeletedSub;
+  StreamSubscription<MessageDeletedEvent>? _messageDeletedSub;
+  StreamSubscription<GroupMessageDeletedEvent>? _groupMessageDeletedSub;
+  StreamSubscription<void>? _groupMembershipChangedSub;
 
   String? get token => _token;
   UserInfo? get me => _me;
@@ -72,6 +78,7 @@ class AppState extends ChangeNotifier {
   bool get sessionChecked => _sessionChecked;
   String? get error => _error;
   String? get chatStatus => _chatStatus;
+  double? get uploadProgress => _uploadProgress;
   Map<String, List<Message>> get conversations => _conversations;
   List<Connection> get contacts => _contacts;
   String? get activeChatUserId => _activeChatUserId;
@@ -127,9 +134,11 @@ class AppState extends ChangeNotifier {
   }
 
   void _rebuildServices() {
+    final previousChat = chat;
     auth = AuthService(baseUrl: serverSettings.authUrl);
     chat = ChatService(wsUrl: serverSettings.chatUrl, log: log);
     file = FileService(wsUrl: serverSettings.fileUrl);
+    previousChat.dispose();
     log.info('Server endpoints updated', category: 'app');
   }
 
@@ -146,12 +155,24 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  MessengerFileInfo? fileMetadata(String fileId) => _fileMetadataCache.get(fileId);
+  void _setUploadProgress(double value) {
+    final progress = value.clamp(0.0, 1.0);
+    if (_uploadProgress != null &&
+        progress < 1 &&
+        (progress - _uploadProgress!).abs() < 0.02) {
+      return;
+    }
+    _uploadProgress = progress;
+    notifyListeners();
+  }
+
+  MessengerFileInfo? fileMetadata(String fileId) =>
+      _fileMetadataCache.get(fileId);
 
   Future<void> reconnectWithNewSettings() async {
     log.info('Applying new server settings…', category: 'app');
     await _cancelChatSubscriptions();
-    chat.disconnect();
+    await chat.disconnect();
     _conversations.clear();
     _contacts.clear();
     _groups.clear();
@@ -159,7 +180,6 @@ class AppState extends ChangeNotifier {
     _rebuildServices();
 
     if (_token == null) {
-      _rebuildServices();
       notifyListeners();
       return;
     }
@@ -174,6 +194,7 @@ class AppState extends ChangeNotifier {
       _me = null;
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('session_token');
+      await prefs.remove('user_uuid');
       await _conversationStore.setUserScope(null);
       await _messageCache.setUserScope(null);
     }
@@ -213,11 +234,18 @@ class AppState extends ChangeNotifier {
     } else {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('session_token');
+      await prefs.remove('user_uuid');
     }
   }
 
   Future<bool> login(String loginDetails, String password,
       {String loginType = 'email'}) async {
+    if (loginDetails.trim().isEmpty || password.isEmpty) {
+      _setError(
+          'Enter your ${loginType == 'phone' ? 'phone number' : 'email'} and password.',
+          category: 'auth');
+      return false;
+    }
     _loading = true;
     _error = null;
     notifyListeners();
@@ -229,7 +257,6 @@ class AppState extends ChangeNotifier {
     );
 
     if (token == null) {
-      _loading = false;
       _loading = false;
       _setError(
         'Could not sign in. Check credentials and server URL in settings.',
@@ -265,18 +292,20 @@ class AppState extends ChangeNotifier {
 
   Future<void> _registerBackgroundTasks() async {
     if (!serverSettings.isConfigured) return;
-    await MessageListenerService.configure();
     if (BackgroundSync.isSupported) {
       await BackgroundSync.register();
     }
   }
 
-  /// Drop the UI WebSocket so the background listener owns the server connection.
-  Future<void> prepareForBackgroundListener() async {
+  /// Disconnect the visible session and advertise offline before background sync.
+  Future<void> prepareForBackgroundNotifications() async {
     if (_token == null) return;
     await _cancelChatSubscriptions();
-    chat.disconnect();
-    _setStatus('Background listener active', category: 'chat');
+    await chat.disconnect();
+    await auth.setOffline(_token!);
+    _contacts = [];
+    _onlinePeerIds.clear();
+    _setStatus('Offline — background notifications enabled', category: 'chat');
   }
 
   /// Called when the app returns to the foreground.
@@ -300,6 +329,14 @@ class AppState extends ChangeNotifier {
     required String password,
     required String phone,
   }) async {
+    if (username.trim().isEmpty || password.isEmpty) {
+      _setError('Username and password are required.', category: 'auth');
+      return false;
+    }
+    if (email.trim().isEmpty && phone.trim().isEmpty) {
+      _setError('Enter an email address or phone number.', category: 'auth');
+      return false;
+    }
     _loading = true;
     _error = null;
     notifyListeners();
@@ -337,17 +374,23 @@ class AppState extends ChangeNotifier {
     await BackgroundMessaging.stop();
 
     await auth.setOnline(_token!);
-    await chat.connect(_token!);
-
     _msgSub = chat.messages.listen(_onMessage);
     _historySub = chat.historyEvents.listen(_onHistory);
     _connectionsSub = chat.connections.listen(_onConnections);
-    _dialogPeersSub = chat.dialogPeers.listen(_onDialogPeers);
     _readSub = chat.readReceipts.listen(_onReadReceipt);
     _markReadSub = chat.markReadResults.listen(_onMarkReadResult);
     _errorSub = chat.errors.listen((msg) {
       final text = msg.trim();
       if (text.isNotEmpty) _setError(text, category: 'chat');
+    });
+    _connectionStateSub = chat.connectionState.listen((connected) {
+      if (connected) {
+        _reconnectTimer?.cancel();
+        _reconnectTimer = null;
+      } else if (_token != null) {
+        _setStatus('Chat disconnected — reconnecting…', category: 'chat');
+        _scheduleChatReconnect();
+      }
     });
     _joinSub = chat.joinEvents.listen((info) {
       _setStatus('Connected', category: 'chat');
@@ -372,6 +415,18 @@ class AppState extends ChangeNotifier {
         notifyListeners();
       }
     });
+    _groupUpdatedSub = chat.groupUpdated.listen(_onGroupUpdated);
+    _groupDeletedSub = chat.groupDeleted.listen(_onGroupDeleted);
+    _messageDeletedSub = chat.messageDeleted.listen(_onMessageDeleted);
+    _groupMessageDeletedSub =
+        chat.groupMessageDeleted.listen(_onGroupMessageDeleted);
+    _groupMembershipChangedSub = chat.groupMembershipChanged.listen((_) {
+      if (chat.isConnected) chat.listGroups();
+    });
+
+    // Subscribe before join: broadcast streams do not replay a fast server
+    // response, so connecting first can lose the `joined` event.
+    await chat.connect(_token!);
 
     _migrateStoredPeerKeys();
     _indexPeersFromCachedMessages();
@@ -395,6 +450,16 @@ class AppState extends ChangeNotifier {
   void _stopPresencePolling() {
     _presenceTimer?.cancel();
     _presenceTimer = null;
+  }
+
+  void _scheduleChatReconnect() {
+    if (_reconnectTimer?.isActive == true) return;
+    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+      _reconnectTimer = null;
+      if (_token != null && !chat.isConnected) {
+        unawaited(_connectChat());
+      }
+    });
   }
 
   void _scheduleServerSync() {
@@ -438,28 +503,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _onDialogPeers(List<String> peerIds) {
-    if (peerIds.isEmpty) return;
-    final meId = _me?.uuid;
-    if (meId == null) return;
-
-    log.info(
-      'Syncing ${peerIds.length} dialog(s) from server',
-      category: 'chat',
-      banner: false,
-    );
-
-    for (final raw in peerIds) {
-      final peerId = _canonicalPeerId(raw);
-      if (peerId == meId) continue;
-      _conversations.putIfAbsent(peerId, () => []);
-      _rememberPeer(peerId, _nameForPeer(peerId));
-      chat.requestHistory(peerId);
-    }
-    _conversationStore.save();
-    notifyListeners();
-  }
-
   void _indexPeersFromCachedMessages() {
     final meId = _me?.uuid;
     for (final entry in _conversations.entries) {
@@ -468,9 +511,8 @@ class AppState extends ChangeNotifier {
         _rememberPeer(peerId, _nameForPeer(peerId));
       }
       for (final m in entry.value) {
-        final other = meId != null && m.senderId == meId
-            ? m.receiverId
-            : m.senderId;
+        final other =
+            meId != null && m.senderId == meId ? m.receiverId : m.senderId;
         if (other.isEmpty || other == meId) continue;
         _rememberPeer(_canonicalPeerId(other), _nameForPeer(other));
       }
@@ -523,6 +565,8 @@ class AppState extends ChangeNotifier {
 
   Future<void> _cancelChatSubscriptions() async {
     _stopPresencePolling();
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
     await _msgSub?.cancel();
     await _historySub?.cancel();
     await _connectionsSub?.cancel();
@@ -534,7 +578,12 @@ class AppState extends ChangeNotifier {
     await _groupMsgSub?.cancel();
     await _groupHistorySub?.cancel();
     await _groupCreatedSub?.cancel();
-    await _dialogPeersSub?.cancel();
+    await _connectionStateSub?.cancel();
+    await _groupUpdatedSub?.cancel();
+    await _groupDeletedSub?.cancel();
+    await _messageDeletedSub?.cancel();
+    await _groupMessageDeletedSub?.cancel();
+    await _groupMembershipChangedSub?.cancel();
     _msgSub = null;
     _historySub = null;
     _connectionsSub = null;
@@ -546,7 +595,12 @@ class AppState extends ChangeNotifier {
     _groupMsgSub = null;
     _groupHistorySub = null;
     _groupCreatedSub = null;
-    _dialogPeersSub = null;
+    _connectionStateSub = null;
+    _groupUpdatedSub = null;
+    _groupDeletedSub = null;
+    _messageDeletedSub = null;
+    _groupMessageDeletedSub = null;
+    _groupMembershipChangedSub = null;
   }
 
   void _onGroups(List<ChatGroup> groups) {
@@ -554,6 +608,45 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(groups)
       ..sort((a, b) => a.name.compareTo(b.name));
+    notifyListeners();
+  }
+
+  void _onGroupUpdated(ChatGroup group) {
+    final index = _groups.indexWhere((item) => item.uuid == group.uuid);
+    if (index == -1) {
+      _groups.add(group);
+    } else {
+      _groups[index] = group;
+    }
+    _groups.sort((a, b) => a.name.compareTo(b.name));
+    if (_activeGroupId == group.uuid) _activeGroupName = group.name;
+    notifyListeners();
+  }
+
+  void _onGroupDeleted(String groupId) {
+    _groups.removeWhere((group) => group.uuid == groupId);
+    _groupConversations.remove(groupId);
+    if (_activeGroupId == groupId) closeGroupChat();
+    notifyListeners();
+  }
+
+  void _onMessageDeleted(MessageDeletedEvent event) {
+    var changed = false;
+    for (final messages in _conversations.values) {
+      final before = messages.length;
+      messages.removeWhere((message) => message.uuid == event.messageUuid);
+      changed = changed || before != messages.length;
+    }
+    if (changed) {
+      _schedulePersist();
+      notifyListeners();
+    }
+  }
+
+  void _onGroupMessageDeleted(GroupMessageDeletedEvent event) {
+    final messages = _groupConversations[event.groupId];
+    if (messages == null) return;
+    messages.removeWhere((message) => message.uuid == event.messageUuid);
     notifyListeners();
   }
 
@@ -582,6 +675,19 @@ class AppState extends ChangeNotifier {
     if (_activeGroupId == msg.groupId) {
       chat.markGroupRead(msg.groupId);
     }
+    if (msg.senderId != _me?.uuid) {
+      final group = _groups.cast<ChatGroup?>().firstWhere(
+            (item) => item?.uuid == msg.groupId,
+            orElse: () => null,
+          );
+      final inActiveGroup = _activeGroupId == msg.groupId;
+      NotificationService.instance.showIncomingMessage(
+        peerId: 'group:${msg.groupId}',
+        title: group?.name ?? 'Group message',
+        body: msg.previewText.isNotEmpty ? msg.previewText : 'New message',
+        force: !inActiveGroup,
+      );
+    }
     notifyListeners();
   }
 
@@ -593,6 +699,11 @@ class AppState extends ChangeNotifier {
     _activeGroupName = name;
     _activeChatUserId = null;
     _activeChatUsername = null;
+    NotificationService.instance.setActiveChat('group:$groupId');
+    unawaited(BackgroundState.updateAppState(
+      inForeground: true,
+      activeChatPeerId: 'group:$groupId',
+    ));
     _groupConversations.putIfAbsent(groupId, () => []);
     chat.requestGroupHistory(groupId);
     chat.markGroupRead(groupId);
@@ -602,7 +713,23 @@ class AppState extends ChangeNotifier {
   void closeGroupChat() {
     _activeGroupId = null;
     _activeGroupName = null;
+    NotificationService.instance.setActiveChat(null);
+    unawaited(BackgroundState.updateAppState(inForeground: true));
     notifyListeners();
+  }
+
+  void deleteGroupMessage(GroupMessage message, {bool forEveryone = false}) {
+    if (message.uuid.startsWith('local-')) return;
+    chat.deleteGroupMessage(message.uuid, forEveryone: forEveryone);
+  }
+
+  void leaveActiveGroup() {
+    final groupId = _activeGroupId;
+    if (groupId == null) return;
+    chat.leaveGroup(groupId);
+    _groups.removeWhere((group) => group.uuid == groupId);
+    _groupConversations.remove(groupId);
+    closeGroupChat();
   }
 
   /// Splits comma/semicolon/newline-separated usernames.
@@ -650,6 +777,9 @@ class AppState extends ChangeNotifier {
   Future<({bool ok, String? message})> createGroup(
     String name, {
     List<String> memberUsernames = const [],
+    String? description,
+    bool isPrivate = false,
+    bool isChannel = false,
   }) async {
     if (!chat.isConnected) {
       return (ok: false, message: 'Waiting for chat connection…');
@@ -676,7 +806,14 @@ class AppState extends ChangeNotifier {
       }
     }
 
-    chat.createGroup(name: trimmed, memberIds: memberIds);
+    final cleanDescription = description?.trim();
+    chat.createGroup(
+      name: trimmed,
+      description: cleanDescription?.isEmpty == true ? null : cleanDescription,
+      memberIds: memberIds,
+      isPrivate: isPrivate,
+      isChannel: isChannel,
+    );
     log.info('Creating group "$trimmed" (${memberIds.length} members)',
         category: 'group');
 
@@ -730,7 +867,6 @@ class AppState extends ChangeNotifier {
 
   void sendGroupMessage(String text) {
     if (_activeGroupId == null || text.trim().isEmpty) return;
-    if (!chat.isConnected) return;
     final groupId = _activeGroupId!;
     final meId = _me?.uuid;
     if (meId == null) return;
@@ -750,12 +886,20 @@ class AppState extends ChangeNotifier {
 
   Future<bool> sendGroupFileAttachment() async {
     if (_activeGroupId == null || _token == null) return false;
-    if (!serverSettings.isConfigured || !chat.isConnected) return false;
+    if (!serverSettings.isConfigured) {
+      _setError('Set auth, chat, and file URLs in Server settings');
+      return false;
+    }
+    if (!chat.isConnected) {
+      _setStatus('Attachment will send after chat reconnects',
+          category: 'chat');
+    }
 
     final picked = await pickFileForUpload();
     if (picked == null) return false;
 
     _loading = true;
+    _uploadProgress = 0;
     _error = null;
     log.info('Uploading ${picked.filename} to group…', category: 'file');
     notifyListeners();
@@ -765,6 +909,7 @@ class AppState extends ChangeNotifier {
         bytes: picked.bytes,
         filename: picked.filename,
         mimeType: picked.mimeType,
+        onProgress: _setUploadProgress,
       );
       log.info('Group file uploaded ($fileId)', category: 'file');
       await _fileMetadataCache.put(MessengerFileInfo(
@@ -797,13 +942,13 @@ class AppState extends ChangeNotifier {
       return false;
     } finally {
       _loading = false;
+      _uploadProgress = null;
       notifyListeners();
     }
   }
 
   void _onMessage(Message msg) {
-    final rawPeer =
-        msg.senderId == _me?.uuid ? msg.receiverId : msg.senderId;
+    final rawPeer = msg.senderId == _me?.uuid ? msg.receiverId : msg.senderId;
     final peerId = _canonicalPeerId(rawPeer);
     // Learn peer ids from traffic (including offline delivery on join).
     if (msg.senderId != _me?.uuid) {
@@ -895,6 +1040,7 @@ class AppState extends ChangeNotifier {
     }).toList();
 
     if (!changed) return;
+    _schedulePersist();
   }
 
   void _onHistory(Map<String, List<Message>> event) {
@@ -935,6 +1081,7 @@ class AppState extends ChangeNotifier {
       _conversations[peerId] = msgs
           .map((m) => m.senderId == _me?.uuid ? m.copyWith(status: 2) : m)
           .toList();
+      _schedulePersist();
       notifyListeners();
     }
   }
@@ -979,7 +1126,8 @@ class AppState extends ChangeNotifier {
       if (c.username.toLowerCase() == id.toLowerCase()) return c.uuid;
     }
     for (final entry in _conversationStore.peerNames.entries) {
-      if (entry.value.toLowerCase() == id.toLowerCase() && _looksLikeUuid(entry.key)) {
+      if (entry.value.toLowerCase() == id.toLowerCase() &&
+          _looksLikeUuid(entry.key)) {
         return entry.key;
       }
     }
@@ -1118,6 +1266,12 @@ class AppState extends ChangeNotifier {
       return null;
     }
 
+    final fromContacts = await _resolvePeerFromContacts(trimmed);
+    if (fromContacts != null) {
+      _rememberPeer(fromContacts.peerId, fromContacts.username);
+      return fromContacts;
+    }
+
     final lookup = await auth.lookupPeer(token: _token!, query: trimmed);
     if (lookup.result != null) {
       final r = lookup.result!;
@@ -1125,15 +1279,9 @@ class AppState extends ChangeNotifier {
       return (peerId: r.uuid, username: r.username);
     }
 
-    final fromContacts = await _resolvePeerFromContacts(trimmed);
-    if (fromContacts != null) {
-      _rememberPeer(fromContacts.peerId, fromContacts.username);
-      return fromContacts;
-    }
-
     _lastPeerLookupError = lookup.failure?.message ??
         'Could not find "$trimmed" on the auth server. Use exact username, email, '
-        'or their user ID from Profile. Recipients do not need to be online.';
+            'or their user ID from Profile. Recipients do not need to be online.';
     return null;
   }
 
@@ -1174,7 +1322,7 @@ class AppState extends ChangeNotifier {
   String resolvePeerErrorHint(String query) =>
       _lastPeerLookupError ??
       'No user "$query". Use their exact username (GET /getuserinfo), '
-      'or UUID from Profile. They do not need to be online to receive messages.';
+          'or UUID from Profile. They do not need to be online to receive messages.';
 
   bool _looksLikeUuid(String value) {
     final re = RegExp(
@@ -1197,10 +1345,10 @@ class AppState extends ChangeNotifier {
     _activeGroupId = null;
     _activeGroupName = null;
     NotificationService.instance.setActiveChat(peerId);
-    MessageListenerService.updateAppState(
+    unawaited(BackgroundState.updateAppState(
       inForeground: true,
       activeChatPeerId: peerId,
-    );
+    ));
     _rememberPeer(peerId, username);
     _conversations.putIfAbsent(peerId, () => []);
     chat.requestHistory(peerId);
@@ -1210,7 +1358,8 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  UserInfo? peerProfile(String peerId) => _peerProfiles[_canonicalPeerId(peerId)];
+  UserInfo? peerProfile(String peerId) =>
+      _peerProfiles[_canonicalPeerId(peerId)];
 
   String peerUsername(String peerId) {
     final id = _canonicalPeerId(peerId);
@@ -1349,18 +1498,14 @@ class AppState extends ChangeNotifier {
     _activeGroupId = null;
     _activeGroupName = null;
     NotificationService.instance.setActiveChat(null);
-    MessageListenerService.updateAppState(
-      inForeground: true,
-      activeChatPeerId: null,
-    );
+    unawaited(BackgroundState.updateAppState(inForeground: true));
     notifyListeners();
   }
 
   void sendMessage(String text) {
     if (_activeChatUserId == null || text.trim().isEmpty) return;
     if (!chat.isConnected) {
-      _setStatus('Waiting for chat connection…', category: 'chat');
-      return;
+      _setStatus('Message queued — reconnecting…', category: 'chat');
     }
     final trimmed = text.trim();
     final receiverId = _canonicalPeerId(_activeChatUserId!);
@@ -1386,6 +1531,11 @@ class AppState extends ChangeNotifier {
     chat.sendMessage(receiverId: receiverId, text: trimmed);
   }
 
+  void deleteMessage(Message message, {bool forEveryone = false}) {
+    if (message.uuid.startsWith('local-')) return;
+    chat.deleteMessage(message.uuid, forEveryone: forEveryone);
+  }
+
   /// Picks a file, uploads via file-service, then sends a chat message with [file_id].
   /// Chat-service grants the recipient access automatically.
   Future<bool> sendFileAttachment({String? caption}) async {
@@ -1395,14 +1545,15 @@ class AppState extends ChangeNotifier {
       return false;
     }
     if (!chat.isConnected) {
-      _setStatus('Waiting for chat connection…', category: 'chat');
-      return false;
+      _setStatus('Attachment will send after chat reconnects',
+          category: 'chat');
     }
 
     final picked = await pickFileForUpload();
     if (picked == null) return false;
 
     _loading = true;
+    _uploadProgress = 0;
     _error = null;
     log.info('Uploading ${picked.filename}…', category: 'file');
     notifyListeners();
@@ -1413,6 +1564,7 @@ class AppState extends ChangeNotifier {
         bytes: picked.bytes,
         filename: picked.filename,
         mimeType: picked.mimeType,
+        onProgress: _setUploadProgress,
       );
       log.info('Uploaded ${picked.filename}', category: 'file');
 
@@ -1429,8 +1581,7 @@ class AppState extends ChangeNotifier {
       final receiverId = _canonicalPeerId(_activeChatUserId!);
       final meId = _me!.uuid;
       final trimmedCaption = caption?.trim();
-      final hasCaption =
-          trimmedCaption != null && trimmedCaption.isNotEmpty;
+      final hasCaption = trimmedCaption != null && trimmedCaption.isNotEmpty;
 
       final optimistic = Message(
         uuid: 'local-${DateTime.now().microsecondsSinceEpoch}',
@@ -1458,6 +1609,7 @@ class AppState extends ChangeNotifier {
       return false;
     } finally {
       _loading = false;
+      _uploadProgress = null;
       notifyListeners();
     }
   }
@@ -1539,12 +1691,37 @@ class AppState extends ChangeNotifier {
   Future<bool> updateProfile({
     required String firstName,
     required String lastName,
+    String? username,
+    String? dateOfBirth,
     String? bio,
     String? avatarFileId,
   }) async {
     if (_token == null) return false;
     final fnOk = await auth.changeFirstName(_token!, firstName);
     final lnOk = await auth.changeLastName(_token!, lastName);
+    final cleanUsername = username?.trim();
+    var usernameOk = true;
+    var usernameChanged = false;
+    if (cleanUsername != null &&
+        cleanUsername.isNotEmpty &&
+        cleanUsername != _me?.username) {
+      usernameOk = await auth.changeUsername(_token!, cleanUsername);
+      if (usernameOk && _me != null) {
+        usernameChanged = true;
+        _me = UserInfo(
+          uuid: _me!.uuid,
+          username: cleanUsername,
+          firstName: _me!.firstName,
+          lastName: _me!.lastName,
+          dateOfBirth: _me!.dateOfBirth,
+          additionalInfo: _me!.additionalInfo,
+        );
+      }
+    }
+    var birthDateOk = true;
+    if (dateOfBirth != null && dateOfBirth.trim() != (_me?.dateOfBirth ?? '')) {
+      birthDateOk = await auth.changeDateOfBirth(_token!, dateOfBirth.trim());
+    }
 
     final extras = ProfileExtras.parse(_me?.additionalInfo);
     final serialized = ProfileExtras(
@@ -1556,10 +1733,9 @@ class AppState extends ChangeNotifier {
       extrasOk = await auth.changeAdditionalInfo(_token!, serialized);
     }
 
-    if (!fnOk && !lnOk && !extrasOk) return false;
-
     await loadMyProfile();
-    return true;
+    if (usernameChanged) await _connectChat();
+    return fnOk && lnOk && usernameOk && birthDateOk && extrasOk;
   }
 
   Future<String?> uploadAvatarImage() async {
@@ -1574,6 +1750,7 @@ class AppState extends ChangeNotifier {
     }
 
     _loading = true;
+    _uploadProgress = 0;
     notifyListeners();
     try {
       final fileId = await file.uploadFile(
@@ -1581,6 +1758,7 @@ class AppState extends ChangeNotifier {
         bytes: picked.bytes,
         filename: picked.filename,
         mimeType: picked.mimeType,
+        onProgress: _setUploadProgress,
       );
       await _fileMetadataCache.put(MessengerFileInfo(
         fileId: fileId,
@@ -1596,6 +1774,7 @@ class AppState extends ChangeNotifier {
       return null;
     } finally {
       _loading = false;
+      _uploadProgress = null;
       notifyListeners();
     }
   }
@@ -1609,7 +1788,7 @@ class AppState extends ChangeNotifier {
   Future<void> logout() async {
     if (_token != null) await auth.setOffline(_token!);
     await _cancelChatSubscriptions();
-    chat.disconnect();
+    await chat.disconnect(clearPending: true);
     _token = null;
     _me = null;
     _conversations.clear();
@@ -1630,7 +1809,17 @@ class AppState extends ChangeNotifier {
     await BackgroundMessaging.stop();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('session_token');
+    await prefs.remove('user_uuid');
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _persistDebounce?.cancel();
+    _stopPresencePolling();
+    unawaited(_cancelChatSubscriptions());
+    chat.dispose();
+    super.dispose();
   }
 
   void clearError() {

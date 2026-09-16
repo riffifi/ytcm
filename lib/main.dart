@@ -46,19 +46,22 @@ class App extends StatelessWidget {
           final palette = appearance.palette;
           final lightPalette = palette.resolve(Brightness.light);
           final darkPalette = palette.resolve(Brightness.dark);
-          final brightness =
-              appearance.isLight ? Brightness.light : Brightness.dark;
+          final brightness = appearance.effectiveBrightness(
+            MediaQuery.platformBrightnessOf(context),
+          );
 
           SystemChrome.setSystemUIOverlayStyle(
             AppTheme.overlayFor(brightness),
           );
 
           return MaterialApp(
-            title: 'Messenger',
+            title: 'YeChat',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.light(lightPalette),
             darkTheme: AppTheme.dark(darkPalette),
             themeMode: appearance.mode,
+            themeAnimationDuration: const Duration(milliseconds: 260),
+            themeAnimationCurve: Curves.easeOutCubic,
             builder: (context, child) {
               final theme = Theme.of(context);
               return DefaultTextStyle(

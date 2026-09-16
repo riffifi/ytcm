@@ -30,7 +30,8 @@ class EmojiPickerSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.mc;
     final bottom = MediaQuery.viewPaddingOf(context).bottom;
-    final height = (MediaQuery.sizeOf(context).height * 0.42).clamp(280.0, 380.0);
+    final height =
+        (MediaQuery.sizeOf(context).height * 0.42).clamp(280.0, 380.0);
 
     return Container(
       height: height + bottom,

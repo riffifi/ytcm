@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
@@ -7,9 +6,12 @@ import '../services/app_state.dart';
 import '../icons/phosphor_assets.dart';
 import '../theme.dart';
 import '../widgets/phosphor_icon.dart';
+import '../utils/messenger_haptics.dart';
 import '../utils/platform_ui.dart';
 import 'chat_screen.dart';
 import 'conversations_screen.dart';
+import 'groups_screen.dart';
+import 'profile_screen.dart';
 import 'settings_screen.dart';
 
 /// Root after login: mobile stack or desktop master–detail.
@@ -22,6 +24,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> implements Intents {
   String? _selectedPeerId;
+  int _mobileIndex = 0;
 
   @override
   Intent get newChat => const _NewChatIntent();
@@ -46,7 +49,37 @@ class _HomeShellState extends State<HomeShell> implements Intents {
   @override
   Widget build(BuildContext context) {
     if (!isWideLayout(context)) {
-      return const ConversationsScreen();
+      return Scaffold(
+        body: IndexedStack(
+          index: _mobileIndex,
+          children: const [
+            ConversationsScreen(inShell: true),
+            GroupsScreen(embedded: true),
+            ProfileScreen(embedded: true),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _mobileIndex,
+          onDestinationSelected: (index) {
+            messengerHapticSelection();
+            setState(() => _mobileIndex = index);
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: PhosphorIcon(PhosphorAssets.chat, size: 22),
+              label: 'Chats',
+            ),
+            NavigationDestination(
+              icon: PhosphorIcon(PhosphorAssets.groups, size: 22),
+              label: 'Groups',
+            ),
+            NavigationDestination(
+              icon: PhosphorIcon(PhosphorAssets.user, size: 22),
+              label: 'You',
+            ),
+          ],
+        ),
+      );
     }
 
     final c = context.mc;
@@ -99,27 +132,80 @@ class _HomeShellState extends State<HomeShell> implements Intents {
             backgroundColor: c.bg,
             body: Row(
               children: [
-                SizedBox(
-                  width: 380,
-                  child: ConversationsScreen(
-                    selectionMode: true,
-                    selectedPeerId: activeId ?? _selectedPeerId,
-                    onPeerSelected: _selectPeer,
+                NavigationRail(
+                  selectedIndex: _mobileIndex,
+                  onDestinationSelected: (index) {
+                    messengerHapticSelection();
+                    setState(() => _mobileIndex = index);
+                  },
+                  backgroundColor: c.surface,
+                  indicatorColor: c.accentSoft,
+                  labelType: NavigationRailLabelType.all,
+                  minWidth: 82,
+                  leading: Padding(
+                    padding: const EdgeInsets.only(bottom: 18),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.asset(
+                        'assets/icon/app_icon.png',
+                        width: 46,
+                        height: 46,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: PhosphorIcon(PhosphorAssets.chat, size: 22),
+                      label: Text('Chats'),
+                    ),
+                    NavigationRailDestination(
+                      icon: PhosphorIcon(PhosphorAssets.groups, size: 22),
+                      label: Text('Groups'),
+                    ),
+                    NavigationRailDestination(
+                      icon: PhosphorIcon(PhosphorAssets.user, size: 22),
+                      label: Text('You'),
+                    ),
+                  ],
                 ),
-                Container(width: 1, color: c.border),
+                Container(width: 1, color: c.borderSoft),
                 Expanded(
-                  child: showChat
-                      ? ChatScreen(
-                          embedded: true,
-                          onClose: _clearSelection,
-                        )
-                      : _DesktopEmptyPane(
-                          onNewChat: () => ConversationsScreen.showNewChatModal(
-                            context,
-                            onPeerSelected: _selectPeer,
+                  child: IndexedStack(
+                    index: _mobileIndex,
+                    children: [
+                      Row(
+                        children: [
+                          SizedBox(
+                            width: 370,
+                            child: ConversationsScreen(
+                              selectionMode: true,
+                              inShell: true,
+                              selectedPeerId: activeId ?? _selectedPeerId,
+                              onPeerSelected: _selectPeer,
+                            ),
                           ),
-                        ),
+                          Container(width: 1, color: c.borderSoft),
+                          Expanded(
+                            child: showChat
+                                ? ChatScreen(
+                                    embedded: true,
+                                    onClose: _clearSelection,
+                                  )
+                                : _DesktopEmptyPane(
+                                    onNewChat: () =>
+                                        ConversationsScreen.showNewChatModal(
+                                      context,
+                                      onPeerSelected: _selectPeer,
+                                    ),
+                                  ),
+                          ),
+                        ],
+                      ),
+                      const GroupsScreen(embedded: true),
+                      const ProfileScreen(embedded: true),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -144,21 +230,44 @@ class _DesktopEmptyPane extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            PhosphorIcon(PhosphorAssets.chat, size: 48, color: c.border),
-            const SizedBox(height: 16),
+            Container(
+              width: 108,
+              height: 108,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: c.borderSoft),
+                boxShadow: [
+                  BoxShadow(
+                    color: c.accent.withValues(alpha: 0.16),
+                    blurRadius: 36,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(24),
+                child: Image.asset(
+                  'assets/icon/app_icon.png',
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
             Text(
-              'Select a conversation',
-              style: AppTheme.text(c, fontSize: 16, wght: AppFontWeight.medium),
+              'Your conversations live here',
+              style: AppTheme.heading(c, fontSize: 24),
             ),
             const SizedBox(height: 8),
             Text(
-              desktopShortcutHint(context),
+              'Choose a chat from the sidebar or start a new one.\n${desktopShortcutHint(context)}',
               textAlign: TextAlign.center,
               style: AppTheme.text(
                 c,
-                color: c.tertiary,
-                fontSize: 12,
+                color: c.secondary,
+                fontSize: 13,
                 wght: 450,
+                height: 1.5,
               ),
             ),
             const SizedBox(height: 20),

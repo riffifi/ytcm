@@ -52,11 +52,15 @@ void openChatInApp(
 
 /// Ctrl/Cmd+N and Ctrl/Cmd+, (desktop master–detail).
 Map<ShortcutActivator, Intent> desktopShortcuts(Intents intents) => {
-      SingleActivator(LogicalKeyboardKey.keyN, control: true): intents.newChat,
-      SingleActivator(LogicalKeyboardKey.keyN, meta: true): intents.newChat,
-      SingleActivator(LogicalKeyboardKey.comma, control: true): intents.settings,
-      SingleActivator(LogicalKeyboardKey.comma, meta: true): intents.settings,
-      SingleActivator(LogicalKeyboardKey.escape): intents.closeChat,
+      const SingleActivator(LogicalKeyboardKey.keyN, control: true):
+          intents.newChat,
+      const SingleActivator(LogicalKeyboardKey.keyN, meta: true):
+          intents.newChat,
+      const SingleActivator(LogicalKeyboardKey.comma, control: true):
+          intents.settings,
+      const SingleActivator(LogicalKeyboardKey.comma, meta: true):
+          intents.settings,
+      const SingleActivator(LogicalKeyboardKey.escape): intents.closeChat,
     };
 
 abstract class Intents {

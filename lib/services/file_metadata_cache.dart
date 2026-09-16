@@ -48,7 +48,13 @@ class FileMetadataCache {
   }
 
   static String localPathFor(String fileId, String filename) {
-    final safeName = filename.replaceAll(RegExp(r'[^\w.\-]+'), '_');
-    return p.join(fileId, safeName);
+    final safeId = fileId.replaceAll(RegExp(r'[^a-zA-Z0-9_-]+'), '_');
+    final cleanedName = filename
+        .replaceAll(RegExp(r'[^\w.\-]+'), '_')
+        .replaceAll(RegExp(r'\.{2,}'), '_');
+    final safeName = cleanedName.replaceAll(RegExp(r'^\.+$'), '').isEmpty
+        ? 'attachment'
+        : cleanedName;
+    return p.join(safeId.isEmpty ? 'unknown' : safeId, safeName);
   }
 }

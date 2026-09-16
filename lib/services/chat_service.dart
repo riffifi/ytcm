@@ -5,19 +5,45 @@ import '../models/group_models.dart';
 import '../models/models.dart';
 import 'messenger_log.dart';
 
+class MessageDeletedEvent {
+  final String messageUuid;
+  final String byUserId;
+  final bool forEveryone;
+
+  const MessageDeletedEvent({
+    required this.messageUuid,
+    required this.byUserId,
+    required this.forEveryone,
+  });
+}
+
+class GroupMessageDeletedEvent {
+  final String groupId;
+  final String messageUuid;
+  final String byUserId;
+  final bool forEveryone;
+
+  const GroupMessageDeletedEvent({
+    required this.groupId,
+    required this.messageUuid,
+    required this.byUserId,
+    required this.forEveryone,
+  });
+}
+
 class ChatService {
   final String wsUrl;
   final MessengerLog? log;
   WebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _socketSubscription;
   String? _token;
   bool _joined = false;
+  final List<Map<String, dynamic>> _pendingActions = [];
 
   final _messageController = StreamController<Message>.broadcast();
   final _historyController =
       StreamController<Map<String, List<Message>>>.broadcast();
-  final _connectionsController =
-      StreamController<List<Connection>>.broadcast();
-  final _dialogPeersController = StreamController<List<String>>.broadcast();
+  final _connectionsController = StreamController<List<Connection>>.broadcast();
   final _joinController = StreamController<UserInfo>.broadcast();
   final _readReceiptController = StreamController<String>.broadcast();
   final _markReadResultController = StreamController<String>.broadcast();
@@ -29,12 +55,18 @@ class ChatService {
   final _groupHistoryController =
       StreamController<Map<String, List<GroupMessage>>>.broadcast();
   final _groupCreatedController = StreamController<ChatGroup>.broadcast();
+  final _groupUpdatedController = StreamController<ChatGroup>.broadcast();
+  final _groupDeletedController = StreamController<String>.broadcast();
+  final _messageDeletedController =
+      StreamController<MessageDeletedEvent>.broadcast();
+  final _groupMessageDeletedController =
+      StreamController<GroupMessageDeletedEvent>.broadcast();
+  final _groupMembershipChangedController = StreamController<void>.broadcast();
 
   Stream<Message> get messages => _messageController.stream;
   Stream<Map<String, List<Message>>> get historyEvents =>
       _historyController.stream;
   Stream<List<Connection>> get connections => _connectionsController.stream;
-  Stream<List<String>> get dialogPeers => _dialogPeersController.stream;
   Stream<UserInfo> get joinEvents => _joinController.stream;
   Stream<String> get readReceipts => _readReceiptController.stream;
   Stream<String> get markReadResults => _markReadResultController.stream;
@@ -46,12 +78,21 @@ class ChatService {
   Stream<Map<String, List<GroupMessage>>> get groupHistoryEvents =>
       _groupHistoryController.stream;
   Stream<ChatGroup> get groupCreated => _groupCreatedController.stream;
+  Stream<ChatGroup> get groupUpdated => _groupUpdatedController.stream;
+  Stream<String> get groupDeleted => _groupDeletedController.stream;
+  Stream<MessageDeletedEvent> get messageDeleted =>
+      _messageDeletedController.stream;
+  Stream<GroupMessageDeletedEvent> get groupMessageDeleted =>
+      _groupMessageDeletedController.stream;
+  Stream<void> get groupMembershipChanged =>
+      _groupMembershipChangedController.stream;
 
   bool get isConnected => _channel != null && _joined;
 
   ChatService({required this.wsUrl, this.log});
 
   Future<void> connect(String token) async {
+    await _closeSocket();
     _token = token;
     _joined = false;
     log?.info('Connecting to chat…', category: 'chat');
@@ -60,22 +101,29 @@ class ChatService {
       await _channel!.ready.timeout(const Duration(seconds: 10));
       _connectionStateController.add(true);
       log?.debug('Chat WebSocket open', category: 'chat', banner: false);
-      _channel!.stream.listen(
+      _socketSubscription = _channel!.stream.listen(
         _handleMessage,
         onError: (_) {
           _joined = false;
+          _channel = null;
           _connectionStateController.add(false);
         },
         onDone: () {
           _joined = false;
+          _channel = null;
           _connectionStateController.add(false);
         },
       );
       _send({'action': 'join', 'session_token': token});
       log?.debug('Sent join', category: 'chat', banner: false);
     } catch (e) {
+      await _closeSocket();
       _connectionStateController.add(false);
-      final msg = 'WebSocket connection failed: $e';
+      final raw = e.toString();
+      final msg = raw.contains('status code: 502') ||
+              raw.contains('status code: 503')
+          ? 'Chat service is temporarily unavailable (server gateway error).'
+          : 'WebSocket connection failed: $e';
       log?.error(msg, category: 'chat');
       _errorController.add(msg);
     }
@@ -87,13 +135,19 @@ class ChatService {
     try {
       probe = WebSocketChannel.connect(Uri.parse(wsUrl));
       await probe.ready.timeout(const Duration(seconds: 8));
-      await probe.sink.close();
+      await probe.sink.close().timeout(const Duration(seconds: 1));
       return 'Reachable (WebSocket open)';
     } catch (e) {
+      final text = e.toString();
+      if (text.contains('status code: 502') ||
+          text.contains('status code: 503')) {
+        return 'Server gateway error. The reverse proxy is online, but '
+            'chat-service is unavailable.';
+      }
       return 'Failed: $e';
     } finally {
       try {
-        await probe?.sink.close();
+        await probe?.sink.close().timeout(const Duration(seconds: 1));
       } catch (_) {}
     }
   }
@@ -133,10 +187,11 @@ class ChatService {
             uuid: json['user_id'] as String,
             username: json['username'] as String,
           ));
+          _flushPendingActions();
           break;
         case 'message':
-          _messageController.add(
-              Message.fromJson(json['message'] as Map<String, dynamic>));
+          _messageController
+              .add(Message.fromJson(json['message'] as Map<String, dynamic>));
           break;
         case 'history':
           final msgs = (json['messages'] as List)
@@ -152,18 +207,6 @@ class ChatService {
               .toList();
           _connectionsController.add(conns);
           break;
-        case 'dialog_peers':
-          final peers = (json['peer_ids'] as List)
-              .map((id) => id.toString())
-              .where((id) => id.isNotEmpty)
-              .toList();
-          log?.info(
-            'Dialog peers from server (${peers.length})',
-            category: 'chat',
-            banner: false,
-          );
-          _dialogPeersController.add(peers);
-          break;
         case 'read_receipt':
           _readReceiptController.add(json['by_user_id'] as String);
           break;
@@ -172,6 +215,13 @@ class ChatService {
           if (withUser != null) {
             _markReadResultController.add(withUser);
           }
+          break;
+        case 'message_deleted':
+          _messageDeletedController.add(MessageDeletedEvent(
+            messageUuid: json['message_uuid'] as String,
+            byUserId: json['by_user_id'] as String,
+            forEveryone: json['for_everyone'] as bool? ?? false,
+          ));
           break;
         case 'groups':
           log?.debug(
@@ -189,6 +239,19 @@ class ChatService {
           log?.info('Group created: ${g.name}', category: 'group');
           _groupCreatedController.add(g);
           break;
+        case 'group_updated':
+          _groupUpdatedController.add(
+            ChatGroup.fromJson(json['group'] as Map<String, dynamic>),
+          );
+          break;
+        case 'group_deleted':
+          _groupDeletedController.add(json['group_id'] as String);
+          break;
+        case 'group_member_added':
+        case 'group_member_updated':
+        case 'group_member_removed':
+          _groupMembershipChangedController.add(null);
+          break;
         case 'group_message':
           _groupMessageController.add(GroupMessage.fromJson(
             json['message'] as Map<String, dynamic>,
@@ -196,12 +259,19 @@ class ChatService {
           break;
         case 'group_history':
           final msgs = (json['messages'] as List)
-              .map((m) =>
-                  GroupMessage.fromJson(m as Map<String, dynamic>))
+              .map((m) => GroupMessage.fromJson(m as Map<String, dynamic>))
               .toList();
           _groupHistoryController.add({
             json['group_id'] as String: msgs,
           });
+          break;
+        case 'group_message_deleted':
+          _groupMessageDeletedController.add(GroupMessageDeletedEvent(
+            groupId: json['group_id'] as String,
+            messageUuid: json['message_uuid'] as String,
+            byUserId: json['by_user_id'] as String,
+            forEveryone: json['for_everyone'] as bool? ?? false,
+          ));
           break;
         case 'pong':
           log?.debug('Pong', category: 'chat', banner: false);
@@ -224,7 +294,22 @@ class ChatService {
   }
 
   void _send(Map<String, dynamic> data) {
+    if (!_joined && data['action'] != 'join') {
+      if (_pendingActions.length >= 100) _pendingActions.removeAt(0);
+      _pendingActions.add(Map<String, dynamic>.from(data));
+      return;
+    }
     _channel?.sink.add(jsonEncode(data));
+  }
+
+  void _flushPendingActions() {
+    if (!_joined || _channel == null || _pendingActions.isEmpty) return;
+    final pending = List<Map<String, dynamic>>.from(_pendingActions);
+    _pendingActions.clear();
+    for (final action in pending) {
+      action['session_token'] = _token;
+      _channel!.sink.add(jsonEncode(action));
+    }
   }
 
   void sendMessage({required String receiverId, String? text, String? fileId}) {
@@ -254,16 +339,17 @@ class ChatService {
     });
   }
 
-  void listConnections() {
-    _send({'action': 'list_connections', 'session_token': _token});
+  void deleteMessage(String messageUuid, {bool forEveryone = false}) {
+    _send({
+      'action': 'delete_message',
+      'session_token': _token,
+      'message_uuid': messageUuid,
+      'for_everyone': forEveryone,
+    });
   }
 
-  void listDialogPeers({int limit = 200}) {
-    _send({
-      'action': 'list_dialog_peers',
-      'session_token': _token,
-      'limit': limit,
-    });
+  void listConnections() {
+    _send({'action': 'list_connections', 'session_token': _token});
   }
 
   void ping() {
@@ -338,19 +424,54 @@ class ChatService {
     });
   }
 
-  void disconnect() {
+  void deleteGroupMessage(String messageUuid, {bool forEveryone = false}) {
+    _send({
+      'action': 'delete_group_message',
+      'session_token': _token,
+      'message_uuid': messageUuid,
+      'for_everyone': forEveryone,
+    });
+  }
+
+  void leaveGroup(String groupId) {
+    _send({
+      'action': 'leave_group',
+      'session_token': _token,
+      'group_id': groupId,
+    });
+  }
+
+  void deleteGroup(String groupId) {
+    _send({
+      'action': 'delete_group',
+      'session_token': _token,
+      'group_id': groupId,
+    });
+  }
+
+  Future<void> disconnect({bool clearPending = false}) {
     _joined = false;
+    if (clearPending) _pendingActions.clear();
     log?.info('Chat disconnected', category: 'chat');
-    _channel?.sink.close();
+    return _closeSocket();
+  }
+
+  Future<void> _closeSocket() async {
+    final subscription = _socketSubscription;
+    final channel = _channel;
+    _socketSubscription = null;
     _channel = null;
+    await subscription?.cancel();
+    try {
+      await channel?.sink.close().timeout(const Duration(seconds: 1));
+    } catch (_) {}
   }
 
   void dispose() {
-    disconnect();
+    disconnect(clearPending: true);
     _messageController.close();
     _historyController.close();
     _connectionsController.close();
-    _dialogPeersController.close();
     _joinController.close();
     _readReceiptController.close();
     _markReadResultController.close();
@@ -361,5 +482,10 @@ class ChatService {
     _groupMessageController.close();
     _groupHistoryController.close();
     _groupCreatedController.close();
+    _groupUpdatedController.close();
+    _groupDeletedController.close();
+    _messageDeletedController.close();
+    _groupMessageDeletedController.close();
+    _groupMembershipChangedController.close();
   }
 }

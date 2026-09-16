@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// User preference for push-style local notifications (mobile).
 class NotificationPreferences extends ChangeNotifier {
-  static const _keyEnabled = 'notifications_enabled';
+  static const keyEnabled = 'notifications_enabled';
 
   bool _enabled = true;
   bool _loaded = false;
@@ -29,7 +29,7 @@ class NotificationPreferences extends ChangeNotifier {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    _enabled = prefs.getBool(_keyEnabled) ?? true;
+    _enabled = prefs.getBool(keyEnabled) ?? true;
     _loaded = true;
     notifyListeners();
   }
@@ -37,7 +37,7 @@ class NotificationPreferences extends ChangeNotifier {
   Future<void> setEnabled(bool value) async {
     _enabled = value;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_keyEnabled, value);
+    await prefs.setBool(keyEnabled, value);
     notifyListeners();
   }
 }

@@ -145,7 +145,8 @@ class Connection {
   final String uuid;
   final String username;
 
-  Connection({required this.number, required this.uuid, required this.username});
+  Connection(
+      {required this.number, required this.uuid, required this.username});
 
   factory Connection.fromJson(Map<String, dynamic> json) => Connection(
         number: json['number'],

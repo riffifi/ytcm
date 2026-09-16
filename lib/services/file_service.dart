@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
+import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../models/messenger_file.dart';
@@ -19,12 +20,29 @@ class FileServiceException implements Exception {
 
 class FileService {
   static const chunkSize = 64 * 1024;
+  static const _closeTimeout = Duration(seconds: 1);
 
   final String wsUrl;
 
   FileService({required String wsUrl}) : wsUrl = wsUrl.trim();
 
+  FileServiceException _friendlyError(Object error) {
+    if (error is FileServiceException) return error;
+    final text = error.toString();
+    if (text.contains('status code: 502') ||
+        text.contains('status code: 503')) {
+      return const FileServiceException(
+        'File service is temporarily unavailable. The server gateway cannot '
+        'reach its file backend.',
+      );
+    }
+    return FileServiceException('File service connection failed: $text');
+  }
+
   Future<String> pingReachability() async {
+    final health = await _healthCheck();
+    if (health != null) return health;
+
     WebSocketChannel? probe;
     try {
       probe = WebSocketChannel.connect(Uri.parse(wsUrl));
@@ -35,8 +53,32 @@ class FileService {
       return 'Failed: $e';
     } finally {
       try {
-        await probe?.sink.close();
+        await probe?.sink.close().timeout(_closeTimeout);
       } catch (_) {}
+    }
+  }
+
+  Future<String?> _healthCheck() async {
+    try {
+      final wsUri = Uri.parse(wsUrl);
+      final scheme = wsUri.scheme == 'wss' ? 'https' : 'http';
+      final healthUri =
+          wsUri.replace(scheme: scheme, path: '/health', fragment: '');
+      final response =
+          await http.get(healthUri).timeout(const Duration(seconds: 8));
+      if (response.statusCode == 200 && response.body.trim() == 'ok') {
+        return null;
+      }
+      if (response.statusCode == 502 || response.statusCode == 503) {
+        return 'Server gateway error (HTTP ${response.statusCode}). '
+            'The reverse proxy is online, but the file-service backend is unavailable.';
+      }
+      // Some deployments do not proxy /health; verify the WebSocket directly.
+      if (response.statusCode == 404) return null;
+      return 'File-service health check returned HTTP ${response.statusCode}.';
+    } catch (_) {
+      // A failed HTTP probe can still be caused by a WebSocket-only deployment.
+      return null;
     }
   }
 
@@ -75,7 +117,7 @@ class FileService {
         totalSize == 0 ? 1 : (totalSize + chunkSize - 1) ~/ chunkSize;
 
     final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-    late StreamSubscription<dynamic> sub;
+    StreamSubscription<dynamic>? sub;
 
     try {
       await channel.ready.timeout(const Duration(seconds: 15));
@@ -182,10 +224,12 @@ class FileService {
         throw const FileServiceException('Upload finished without file_id');
       }
       return fileId;
+    } catch (e) {
+      throw _friendlyError(e);
     } finally {
-      await sub.cancel();
+      await sub?.cancel();
       try {
-        await channel.sink.close();
+        await channel.sink.close().timeout(_closeTimeout);
       } catch (_) {}
     }
   }
@@ -196,7 +240,7 @@ class FileService {
     void Function(double progress)? onProgress,
   }) async {
     final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-    late StreamSubscription<dynamic> sub;
+    StreamSubscription<dynamic>? sub;
 
     try {
       await channel.ready.timeout(const Duration(seconds: 15));
@@ -245,8 +289,7 @@ class FileService {
                 }
                 filename = json['filename'] as String? ?? fileId;
                 expectedSize = (json['total_size'] as num?)?.toInt();
-                expectedChunks =
-                    (json['total_chunks'] as num?)?.toInt() ?? 1;
+                expectedChunks = (json['total_chunks'] as num?)?.toInt() ?? 1;
                 if (expectedChunks <= 0) expectedChunks = 1;
                 return;
               }
@@ -290,10 +333,12 @@ class FileService {
           throw const FileServiceException('Download timed out');
         },
       );
+    } catch (e) {
+      throw _friendlyError(e);
     } finally {
-      await sub.cancel();
+      await sub?.cancel();
       try {
-        await channel.sink.close();
+        await channel.sink.close().timeout(_closeTimeout);
       } catch (_) {}
     }
   }
@@ -323,7 +368,7 @@ class FileService {
     Duration timeout = const Duration(seconds: 30),
   }) async {
     final channel = WebSocketChannel.connect(Uri.parse(wsUrl));
-    late StreamSubscription<dynamic> sub;
+    StreamSubscription<dynamic>? sub;
 
     try {
       await channel.ready.timeout(const Duration(seconds: 15));
@@ -353,10 +398,12 @@ class FileService {
 
       channel.sink.add(jsonEncode(payload));
       return await completer.future.timeout(timeout);
+    } catch (e) {
+      throw _friendlyError(e);
     } finally {
-      await sub.cancel();
+      await sub?.cancel();
       try {
-        await channel.sink.close();
+        await channel.sink.close().timeout(_closeTimeout);
       } catch (_) {}
     }
   }

@@ -2,27 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/color_palette.dart';
-import '../theme.dart';
 
 /// Light/dark mode and accent palette (persisted).
 class AppearancePreferences extends ChangeNotifier {
   static const _keyMode = 'theme_mode';
   static const _keyPalette = 'color_palette_id';
 
-  ThemeMode _mode = ThemeMode.dark;
-  String _paletteId = ColorPaletteOption.presets.first.id;
+  ThemeMode _mode = ThemeMode.system;
+  String _paletteId = ColorPaletteOption.defaultId;
   bool _loaded = false;
 
   ThemeMode get mode => _mode;
-  bool get isLight => _mode == ThemeMode.light;
   bool get isLoaded => _loaded;
 
   ColorPaletteOption get palette =>
       ColorPaletteOption.byId(_paletteId) ?? ColorPaletteOption.presets.first;
 
-  AppColors get colors => palette.resolve(
-        isLight ? Brightness.light : Brightness.dark,
-      );
+  Brightness effectiveBrightness(Brightness platformBrightness) =>
+      switch (_mode) {
+        ThemeMode.light => Brightness.light,
+        ThemeMode.dark => Brightness.dark,
+        ThemeMode.system => platformBrightness,
+      };
 
   AppearancePreferences() {
     _load();
@@ -40,19 +41,25 @@ class AppearancePreferences extends ChangeNotifier {
       _mode = ThemeMode.light;
     } else if (savedMode == 'dark') {
       _mode = ThemeMode.dark;
+    } else {
+      _mode = ThemeMode.system;
     }
     final savedPalette = prefs.getString(_keyPalette);
-    if (savedPalette != null && ColorPaletteOption.byId(savedPalette) != null) {
+    if (savedPalette == 'sage') {
+      _paletteId = ColorPaletteOption.defaultId;
+      await prefs.setString(_keyPalette, _paletteId);
+    } else if (savedPalette != null &&
+        ColorPaletteOption.byId(savedPalette) != null) {
       _paletteId = savedPalette;
     }
     _loaded = true;
     notifyListeners();
   }
 
-  Future<void> setLight(bool light) async {
-    _mode = light ? ThemeMode.light : ThemeMode.dark;
+  Future<void> setMode(ThemeMode mode) async {
+    _mode = mode;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyMode, light ? 'light' : 'dark');
+    await prefs.setString(_keyMode, mode.name);
     notifyListeners();
   }
 

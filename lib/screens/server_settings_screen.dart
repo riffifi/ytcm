@@ -104,8 +104,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
       _pingingAuth = true;
       _authPingResult = null;
     });
-    final result =
-        await AuthService(baseUrl: _authCtrl.text.trim()).ping();
+    final result = await AuthService(baseUrl: _authCtrl.text.trim()).ping();
     if (mounted) {
       setState(() {
         _pingingAuth = false;
@@ -154,10 +153,12 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
   bool _isValidUrl(String url,
       {bool requireHttp = false, bool requireWs = false}) {
     if (url.isEmpty) return false;
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) return false;
     if (requireHttp) {
-      return url.startsWith('http://') || url.startsWith('https://');
+      return uri.scheme == 'http' || uri.scheme == 'https';
     }
-    if (requireWs) return url.startsWith('ws://') || url.startsWith('wss://');
+    if (requireWs) return uri.scheme == 'ws' || uri.scheme == 'wss';
     return true;
   }
 
@@ -187,15 +188,22 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Server settings'),
+        title: Text(
+          'Server settings',
+          style: AppTheme.heading(c, fontSize: 26),
+        ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: c.border),
         ),
       ),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
-        children: [
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 32 + bottomInset),
+            children: [
           _infoBox(context),
           const SizedBox(height: 20),
           _label(context, 'Auth service'),
@@ -307,7 +315,9 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
             onPressed: _reset,
             child: const Text('Reset to defaults'),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -320,6 +330,12 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     required VoidCallback onPressed,
   }) {
     final c = context.mc;
+    final normalizedResult = result?.toLowerCase();
+    final failed = normalizedResult != null &&
+        (normalizedResult.startsWith('failed') ||
+            normalizedResult.contains('error') ||
+            normalizedResult.contains('unavailable') ||
+            normalizedResult.contains('not connected'));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -339,9 +355,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           Text(
             result,
             style: TextStyle(
-              color: result.startsWith('Failed') || result.contains('Not connected')
-                  ? c.error
-                  : c.accent,
+              color: failed ? c.error : c.accent,
               fontSize: 12,
               height: 1.4,
             ),
@@ -392,20 +406,19 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
   Widget _loadingButton(BuildContext context) {
     final c = context.mc;
     return Container(
-        height: 50,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: c.accent.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(12),
+      height: 50,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: c.accent.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
         ),
-        child: const Center(
-          child: SizedBox(
-            width: 18,
-            height: 18,
-            child:
-                CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-          ),
-        ),
-      );
+      ),
+    );
   }
 }

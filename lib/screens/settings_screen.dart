@@ -6,6 +6,7 @@ import '../services/app_state.dart';
 import '../services/appearance_preferences.dart';
 import '../services/background_messaging.dart';
 import '../services/notification_preferences.dart';
+import '../services/notification_service.dart';
 import '../icons/phosphor_assets.dart';
 import '../theme.dart';
 import '../widgets/phosphor_icon.dart';
@@ -35,17 +36,21 @@ class SettingsScreen extends StatelessWidget {
           ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Settings'),
+        title: Text('Settings', style: AppTheme.heading(c, fontSize: 26)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: c.border),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 48),
+            children: [
           if (me != null) ...[
-            _SectionLabel('Account'),
+            const _SectionLabel('Account'),
             const SizedBox(height: 10),
             _NavTile(
               icon: PhosphorAssets.user,
@@ -58,34 +63,45 @@ class SettingsScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
           ],
-          _SectionLabel('Appearance'),
+          const _SectionLabel('Appearance'),
           const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               color: c.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: c.border),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: c.borderSoft),
             ),
-            child: SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text(
-                'Light theme',
-                style: TextStyle(color: c.primary, fontSize: 15),
+            child: SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<ThemeMode>(
+                showSelectedIcon: false,
+                segments: const [
+                  ButtonSegment(
+                    value: ThemeMode.system,
+                    icon: Icon(Icons.brightness_auto_outlined, size: 18),
+                    label: Text('System'),
+                  ),
+                  ButtonSegment(
+                    value: ThemeMode.light,
+                    icon: Icon(Icons.light_mode_outlined, size: 18),
+                    label: Text('Light'),
+                  ),
+                  ButtonSegment(
+                    value: ThemeMode.dark,
+                    icon: Icon(Icons.dark_mode_outlined, size: 18),
+                    label: Text('Dark'),
+                  ),
+                ],
+                selected: {appearance.mode},
+                onSelectionChanged: (selection) =>
+                    appearance.setMode(selection.first),
               ),
-              subtitle: Text(
-                'White background',
-                style: TextStyle(color: c.secondary, fontSize: 12),
-              ),
-              value: appearance.isLight,
-              activeThumbColor: Colors.white,
-              activeTrackColor: c.accent,
-              onChanged: (v) => appearance.setLight(v),
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            'Accent color',
+            'Color story',
             style: TextStyle(color: c.secondary, fontSize: 12),
           ),
           const SizedBox(height: 10),
@@ -103,7 +119,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           if (NotificationPreferences.isMobilePlatform) ...[
             const SizedBox(height: 24),
-            _SectionLabel('Notifications'),
+            const _SectionLabel('Notifications'),
             const SizedBox(height: 10),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -119,7 +135,7 @@ class SettingsScreen extends StatelessWidget {
                   style: TextStyle(color: c.primary, fontSize: 15),
                 ),
                 subtitle: Text(
-                  'Keeps a connection while logged in so messages arrive when the app is closed (Android). Disable battery optimization for best results.',
+                  'Checks for new messages in the background while your account remains offline. Android controls the exact delivery time.',
                   style: TextStyle(color: c.secondary, fontSize: 12),
                 ),
                 value: notifPrefs.enabled,
@@ -128,6 +144,21 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (v) async {
                   await notifPrefs.setEnabled(v);
                   if (v) {
+                    final granted =
+                        await NotificationService.instance.requestPermission();
+                    if (!granted) {
+                      await notifPrefs.setEnabled(false);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Allow YeChat notifications in Android settings.',
+                            ),
+                          ),
+                        );
+                      }
+                      return;
+                    }
                     await BackgroundMessaging.ensureRunning();
                   } else {
                     await BackgroundMessaging.stop();
@@ -137,7 +168,7 @@ class SettingsScreen extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 24),
-          _SectionLabel('Diagnostics'),
+          const _SectionLabel('Diagnostics'),
           const SizedBox(height: 6),
           Text(
             'Connection and server messages for troubleshooting.',
@@ -146,7 +177,7 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 10),
           const LogStatusBar(inScrollView: true),
           const SizedBox(height: 24),
-          _SectionLabel('Server'),
+          const _SectionLabel('Server'),
           const SizedBox(height: 10),
           _NavTile(
             icon: PhosphorAssets.server,
@@ -158,7 +189,7 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          _SectionLabel('Session'),
+          const _SectionLabel('Session'),
           const SizedBox(height: 10),
           _NavTile(
             icon: PhosphorAssets.logout,
@@ -171,7 +202,9 @@ class SettingsScreen extends StatelessWidget {
               Navigator.of(context).popUntil((r) => r.isFirst);
             },
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -295,11 +328,13 @@ class _PaletteChip extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 14,
-                height: 14,
+                width: 26,
+                height: 18,
                 decoration: BoxDecoration(
-                  color: option.accent,
-                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [option.accent, option.companion],
+                  ),
+                  borderRadius: BorderRadius.circular(9),
                 ),
               ),
               const SizedBox(width: 8),

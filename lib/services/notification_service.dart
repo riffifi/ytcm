@@ -11,8 +11,9 @@ class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
-  static const _channelId = 'messenger_messages';
-  static const _channelName = 'Messages';
+  static const _channelId = 'yechat_messages_v2';
+  static const _channelName = 'YeChat messages';
+  static const androidSmallIcon = 'ic_stat_chat';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -21,8 +22,7 @@ class NotificationService {
   bool _inForeground = true;
   String? _activePeerId;
 
-  bool get isSupported =>
-      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  bool get isSupported => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   AndroidFlutterLocalNotificationsPlugin? get _android =>
       _plugin.resolvePlatformSpecificImplementation<
@@ -35,11 +35,17 @@ class NotificationService {
   Future<void> init() async {
     if (!isSupported || _initialized) return;
 
-    const android = AndroidInitializationSettings('@drawable/ic_stat_chat');
+    // flutter_local_notifications expects a drawable resource *name*, not an
+    // Android resource reference such as "@drawable/ic_stat_chat".
+    const android = AndroidInitializationSettings(androidSmallIcon);
     const ios = DarwinInitializationSettings();
-    await _plugin.initialize(
+    final initialized = await _plugin.initialize(
       const InitializationSettings(android: android, iOS: ios),
     );
+    if (initialized != true) {
+      debugPrint('NotificationService: plugin initialization failed');
+      return;
+    }
 
     if (Platform.isIOS) {
       await _plugin
@@ -60,42 +66,48 @@ class NotificationService {
           enableLights: true,
         ),
       );
-      await _android?.requestNotificationsPermission();
     }
 
     _initialized = true;
   }
 
-  Future<bool> _canPost() async {
+  Future<bool> requestPermission() async {
     if (!isSupported) return false;
     if (!_initialized) await init();
+    if (!_initialized) return false;
     if (!Platform.isAndroid) return true;
-
-    var enabled = await _android?.areNotificationsEnabled() ?? false;
-    if (!enabled) {
-      await _android?.requestNotificationsPermission();
-      enabled = await _android?.areNotificationsEnabled() ?? false;
-    }
-    return enabled;
+    final granted = await _android?.requestNotificationsPermission();
+    return granted ?? await areNotificationsEnabled();
   }
 
-  Future<void> showIncomingMessage({
+  Future<bool> areNotificationsEnabled() async {
+    if (!isSupported) return false;
+    if (!_initialized) await init();
+    if (!_initialized) return false;
+    if (!Platform.isAndroid) return true;
+    return await _android?.areNotificationsEnabled() ?? false;
+  }
+
+  Future<bool> showIncomingMessage({
     required String peerId,
     required String title,
     required String body,
     bool force = false,
   }) async {
-    if (body.trim().isEmpty) return;
+    if (body.trim().isEmpty) return false;
     if (NotificationPreferences.isMobilePlatform) {
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool('notifications_enabled') == false) return;
+      await prefs.reload();
+      if (prefs.getBool(NotificationPreferences.keyEnabled) == false) {
+        return false;
+      }
     }
-    if (!await _canPost()) return;
+    if (!await areNotificationsEnabled()) return false;
 
-    if (!force && _inForeground && _activePeerId == peerId) return;
+    if (!force && _inForeground && _activePeerId == peerId) return false;
 
     final id = peerId.hashCode.abs() % 2147483647;
-    if (id == 0) return;
+    if (id == 0) return false;
 
     const androidDetails = AndroidNotificationDetails(
       _channelId,
@@ -103,7 +115,7 @@ class NotificationService {
       channelDescription: 'New chat messages',
       importance: Importance.max,
       priority: Priority.high,
-      icon: '@drawable/ic_stat_chat',
+      icon: androidSmallIcon,
       visibility: NotificationVisibility.public,
       category: AndroidNotificationCategory.message,
       ticker: 'New message',
@@ -123,8 +135,10 @@ class NotificationService {
           ),
         ),
       );
+      return true;
     } catch (e, st) {
       debugPrint('NotificationService.show failed: $e\n$st');
+      return false;
     }
   }
 

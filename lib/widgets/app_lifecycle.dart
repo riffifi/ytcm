@@ -2,11 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/app_state.dart';
 import '../services/background_messaging.dart';
-import '../services/message_listener_service.dart';
+import '../services/background_state.dart';
 import '../services/notification_preferences.dart';
 import '../services/notification_service.dart';
 import '../services/server_settings.dart';
@@ -24,12 +23,22 @@ class AppLifecycleBridge extends StatefulWidget {
 class _AppLifecycleBridgeState extends State<AppLifecycleBridge>
     with WidgetsBindingObserver {
   Timer? _backgroundDebounce;
+  bool _isForeground = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _syncForegroundState(resumed: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || !NotificationPreferences.isMobilePlatform) return;
+      final preferences = context.read<NotificationPreferences>();
+      await preferences.ensureLoaded();
+      if (preferences.enabled) {
+        final granted = await NotificationService.instance.requestPermission();
+        if (!granted) await preferences.setEnabled(false);
+      }
+    });
   }
 
   @override
@@ -40,10 +49,9 @@ class _AppLifecycleBridgeState extends State<AppLifecycleBridge>
   }
 
   Future<void> _syncForegroundState({required bool resumed}) async {
+    _isForeground = resumed;
     NotificationService.instance.setAppForeground(resumed);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('app_in_foreground', resumed);
-    await MessageListenerService.updateAppState(inForeground: resumed);
+    await BackgroundState.updateAppState(inForeground: resumed);
   }
 
   @override
@@ -73,23 +81,32 @@ class _AppLifecycleBridgeState extends State<AppLifecycleBridge>
   }
 
   Future<void> _goBackground() async {
+    if (_isForeground) return;
     await _syncForegroundState(resumed: false);
-    if (!mounted) return;
+    if (!mounted || _isForeground) return;
 
     final settings = context.read<ServerSettings>();
     if (!settings.isConfigured) return;
 
     final appState = context.read<AppState>();
     if (!appState.isLoggedIn) return;
+    final notifPrefs = NotificationPreferences.isMobilePlatform
+        ? context.read<NotificationPreferences>()
+        : null;
 
-    if (NotificationPreferences.isMobilePlatform) {
-      final notifPrefs = context.read<NotificationPreferences>();
+    // The UI socket is the server's online-presence signal. Close it before
+    // scheduling brief inbox checks so the account remains visibly offline.
+    await appState.prepareForBackgroundNotifications();
+    if (_isForeground) {
+      await appState.onAppResumed();
+      return;
+    }
+
+    if (notifPrefs != null) {
       await notifPrefs.ensureLoaded();
       if (!notifPrefs.enabled) return;
     }
 
-    // UI releases its socket; background service keeps listening.
-    await appState.prepareForBackgroundListener();
     await BackgroundMessaging.ensureRunning();
   }
 

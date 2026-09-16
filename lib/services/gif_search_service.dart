@@ -43,7 +43,8 @@ class GifSearchService {
     return _searchNekosFallback(q);
   }
 
-  Future<List<GifResult>> _searchTenorV1(String query, {required int limit}) async {
+  Future<List<GifResult>> _searchTenorV1(String query,
+      {required int limit}) async {
     final uri = Uri.https('api.tenor.com', '/v1/search', {
       'key': _key,
       'q': query,

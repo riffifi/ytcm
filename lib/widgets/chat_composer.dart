@@ -232,6 +232,7 @@ class _ChatComposerState extends State<ChatComposer> {
     final c = context.mc;
     final showGifStrip = _gifTriggerStart >= 0 &&
         (_gifLoading || _gifResults.isNotEmpty || _gifQuery.isNotEmpty);
+    final compact = MediaQuery.sizeOf(context).width < 420;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -252,7 +253,7 @@ class _ChatComposerState extends State<ChatComposer> {
           children: [
             if (showGifStrip) _buildGifStrip(c),
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 12, 8),
+              padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -272,13 +273,16 @@ class _ChatComposerState extends State<ChatComposer> {
                     colors: c,
                   ),
                   const SizedBox(width: 2),
-                  _ComposerIconButton(
-                    icon: PhosphorAssets.gif,
-                    tooltip: 'GIF — or type @gif cats',
-                    onTap: _openGifPicker,
-                    colors: c,
-                  ),
-                  const SizedBox(width: 8),
+                  if (!compact) ...[
+                    const SizedBox(width: 2),
+                    _ComposerIconButton(
+                      icon: PhosphorAssets.gif,
+                      tooltip: 'GIF — or type @gif cats',
+                      onTap: _openGifPicker,
+                      colors: c,
+                    ),
+                  ],
+                  const SizedBox(width: 6),
                   Expanded(child: _buildTextField(c)),
                   const SizedBox(width: 8),
                   _SendButton(hasText: _hasText, onSend: _send, colors: c),
@@ -318,8 +322,8 @@ class _ChatComposerState extends State<ChatComposer> {
                   )
                 : ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     itemCount: _gifResults.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 8),
                     itemBuilder: (context, i) {
@@ -370,8 +374,9 @@ class _ChatComposerState extends State<ChatComposer> {
             style: TextStyle(color: c.primary, fontSize: 15, height: 1.35),
             cursorColor: c.accent,
             decoration: InputDecoration(
-              hintText:
-                  'Message · Enter to send · Shift+Enter for new line',
+              hintText: MediaQuery.sizeOf(context).width < 600
+                  ? 'Message'
+                  : 'Message · Enter to send · Shift+Enter for new line',
               hintStyle: TextStyle(color: c.tertiary, fontSize: 14),
               filled: false,
               isDense: true,
@@ -391,7 +396,6 @@ class _ChatComposerState extends State<ChatComposer> {
       ),
     );
   }
-
 }
 
 class _ComposerIconButton extends StatelessWidget {

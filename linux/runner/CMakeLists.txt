@@ -25,7 +25,8 @@ target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
 
 target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
-# Window / launcher icon (pixel-art tree).
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/app_icon.png"
-  DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+# Window / launcher icon. Package the shared source asset so every platform
+# stays in sync when the app icon changes.
+install(FILES "${CMAKE_SOURCE_DIR}/../assets/icon/app_icon.png"
+  DESTINATION "resources"
   COMPONENT Runtime)

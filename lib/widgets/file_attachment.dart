@@ -129,9 +129,8 @@ class _FileAttachmentState extends State<FileAttachment> {
       constraints: const BoxConstraints(minWidth: 180, maxWidth: 260),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: widget.isMe
-            ? Colors.white.withValues(alpha: 0.08)
-            : c.surfaceHigh,
+        color:
+            widget.isMe ? Colors.white.withValues(alpha: 0.08) : c.surfaceHigh,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: widget.isMe ? c.bubbleOutBorder : c.borderSoft,

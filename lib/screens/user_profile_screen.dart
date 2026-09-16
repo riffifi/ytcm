@@ -52,117 +52,121 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Profile'),
+        title: Text('Profile', style: AppTheme.heading(c, fontSize: 26)),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(height: 1, color: c.border),
         ),
       ),
-      body: ListView(
-              padding: const EdgeInsets.all(24),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 48),
+            children: [
+          Center(
+            child: Column(
               children: [
-                Center(
-                  child: Column(
-                    children: [
-                      Stack(
-                        clipBehavior: Clip.none,
-                        children: [
-                          UserAvatar(
-                            avatarFileId: extras.avatarFileId,
-                            initials: profile.initials,
-                            radius: 40,
-                          ),
-                          if (online)
-                            Positioned(
-                              right: 2,
-                              bottom: 2,
-                              child: Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  color: c.success,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: c.bg, width: 2),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        profile.displayName,
-                        style: TextStyle(
-                          color: c.primary,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '@$username',
-                        style: TextStyle(color: c.secondary, fontSize: 14),
-                      ),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: c.surfaceHigh,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          online ? 'Online now' : 'Offline',
-                          style: TextStyle(
-                            color: online ? c.success : c.tertiary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    UserAvatar(
+                      avatarFileId: extras.avatarFileId,
+                      initials: profile.initials,
+                      radius: 40,
+                    ),
+                    if (online)
+                      Positioned(
+                        right: 2,
+                        bottom: 2,
+                        child: Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            color: c.success,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: c.bg, width: 2),
                           ),
                         ),
                       ),
-                    ],
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  profile.displayName,
+                  style: TextStyle(
+                    color: c.primary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 32),
-                _InfoSection(
-                  label: 'About',
-                  value: extras.bio?.isNotEmpty == true
-                      ? extras.bio!
-                      : 'No bio yet',
+                const SizedBox(height: 4),
+                Text(
+                  '@$username',
+                  style: TextStyle(color: c.secondary, fontSize: 14),
                 ),
-                if (_hasValue(profile.firstName) || _hasValue(profile.lastName))
-                  const SizedBox(height: 20),
-                if (_hasValue(profile.firstName))
-                  _InfoSection(label: 'First name', value: profile.firstName!),
-                if (_hasValue(profile.lastName)) ...[
-                  const SizedBox(height: 12),
-                  _InfoSection(label: 'Last name', value: profile.lastName!),
-                ],
-                if (_hasValue(profile.dateOfBirth)) ...[
-                  const SizedBox(height: 12),
-                  _InfoSection(
-                    label: 'Date of birth',
-                    value: profile.dateOfBirth!,
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
                   ),
-                ],
-                const SizedBox(height: 20),
-                _InfoSection(label: 'User ID', value: widget.peerId, mono: true),
-                if (loadingFull) ...[
-                  const SizedBox(height: 24),
-                  Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        color: c.accent,
-                        strokeWidth: 2,
-                      ),
+                  decoration: BoxDecoration(
+                    color: c.surfaceHigh,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    online ? 'Online now' : 'Offline',
+                    style: TextStyle(
+                      color: online ? c.success : c.tertiary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                ],
+                ),
               ],
             ),
+          ),
+          const SizedBox(height: 32),
+          _InfoSection(
+            label: 'About',
+            value: extras.bio?.isNotEmpty == true ? extras.bio! : 'No bio yet',
+          ),
+          if (_hasValue(profile.firstName) || _hasValue(profile.lastName))
+            const SizedBox(height: 20),
+          if (_hasValue(profile.firstName))
+            _InfoSection(label: 'First name', value: profile.firstName!),
+          if (_hasValue(profile.lastName)) ...[
+            const SizedBox(height: 12),
+            _InfoSection(label: 'Last name', value: profile.lastName!),
+          ],
+          if (_hasValue(profile.dateOfBirth)) ...[
+            const SizedBox(height: 12),
+            _InfoSection(
+              label: 'Date of birth',
+              value: profile.dateOfBirth!,
+            ),
+          ],
+          const SizedBox(height: 20),
+          _InfoSection(label: 'User ID', value: widget.peerId, mono: true),
+          if (loadingFull) ...[
+            const SizedBox(height: 24),
+            Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  color: c.accent,
+                  strokeWidth: 2,
+                ),
+              ),
+            ),
+          ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 

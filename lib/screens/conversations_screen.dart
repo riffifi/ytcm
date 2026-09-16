@@ -16,12 +16,14 @@ import '../utils/platform_ui.dart';
 
 class ConversationsScreen extends StatefulWidget {
   final bool selectionMode;
+  final bool inShell;
   final String? selectedPeerId;
   final ValueChanged<ConversationPeer>? onPeerSelected;
 
   const ConversationsScreen({
     super.key,
     this.selectionMode = false,
+    this.inShell = false,
     this.selectedPeerId,
     this.onPeerSelected,
   });
@@ -37,7 +39,8 @@ class ConversationsScreen extends StatefulWidget {
         context: context,
         builder: (ctx) => Dialog(
           backgroundColor: c.surface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
             child: sheet,
@@ -94,8 +97,8 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       context.read<AppState>().prefetchPeerProfiles(
-        peers.map((p) => p.userId),
-      );
+            peers.map((p) => p.userId),
+          );
     });
   }
 
@@ -124,8 +127,36 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       appBar: AppBar(
         centerTitle: false,
         titleSpacing: 16,
-        toolbarHeight: 52,
-        title: Text('Messages', style: AppTheme.heading(c)),
+        toolbarHeight: 72,
+        title: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                'assets/icon/app_icon.png',
+                width: 38,
+                height: 38,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('YeChat', style: AppTheme.heading(c, fontSize: 23)),
+                Text(
+                  'Your conversations',
+                  style: AppTheme.text(
+                    c,
+                    color: c.secondary,
+                    fontSize: 11,
+                    wght: AppFontWeight.medium,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
         actions: [
           if (widget.selectionMode)
             IconButton(
@@ -143,44 +174,46 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
               ),
               tooltip: 'New chat',
             ),
-          IconButton(
-            onPressed: () {
-              messengerHapticSelection();
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const GroupsScreen()),
-              );
-            },
-            icon: PhosphorIcon(
-              PhosphorAssets.groups,
-              color: c.secondary,
-              size: 22,
-            ),
-            tooltip: 'Groups',
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: IconButton(
+          if (!widget.inShell)
+            IconButton(
               onPressed: () {
                 messengerHapticSelection();
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  MaterialPageRoute(builder: (_) => const GroupsScreen()),
                 );
               },
               icon: PhosphorIcon(
-                PhosphorAssets.settings,
+                PhosphorAssets.groups,
                 color: c.secondary,
                 size: 22,
               ),
-              tooltip: 'Settings',
+              tooltip: 'Groups',
             ),
-          ),
+          if (!widget.inShell)
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: IconButton(
+                onPressed: () {
+                  messengerHapticSelection();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  );
+                },
+                icon: PhosphorIcon(
+                  PhosphorAssets.settings,
+                  color: c.secondary,
+                  size: 22,
+                ),
+                tooltip: 'Settings',
+              ),
+            ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(52),
+          preferredSize: const Size.fromHeight(62),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: TextField(
               focusNode: _searchFocus,
               onChanged: (v) => setState(() => _searchQuery = v),
@@ -228,7 +261,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                   },
                   child: ListView.builder(
                     physics: const AlwaysScrollableScrollPhysics(),
-                    padding: EdgeInsets.zero,
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
                     itemCount: filtered.length,
                     itemBuilder: (context, i) => _ConversationTile(
                       peer: filtered[i],
@@ -246,7 +279,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                 ConversationsScreen.showNewChatModal(context);
               },
               backgroundColor: c.accent,
-              elevation: 3,
+              elevation: 2,
               icon: const PhosphorIcon(
                 PhosphorAssets.edit,
                 color: Colors.white,
@@ -463,9 +496,8 @@ class _NewChatSheetState extends State<_NewChatSheet> {
                             ),
                           ),
                         ),
-                        onPressed: _starting
-                            ? null
-                            : () => _openOnlinePeer(peer),
+                        onPressed:
+                            _starting ? null : () => _openOnlinePeer(peer),
                       ),
                   ],
                 ),
@@ -559,133 +591,139 @@ class _ConversationTile extends StatelessWidget {
     final initials = profile?.initials ??
         (displayName.isNotEmpty ? displayName[0].toUpperCase() : '?');
 
-    return Material(
-      color: selected ? c.accentSoft.withValues(alpha: 0.35) : Colors.transparent,
-      child: InkWell(
-        mouseCursor: SystemMouseCursors.click,
-        onTap: () {
-          messengerHapticLight();
-          openChatInApp(
-            context,
-            peerId: peer.userId,
-            username: peer.username,
-            onPeerSelected: selectionMode ? onPeerSelected : null,
-          );
-        },
-        onLongPress: conversationContextMenuIsDesktop(context)
-            ? null
-            : () => showConversationContextMenu(
-                  context: context,
-                  peer: peer,
-                  preview: preview,
-                ),
-        onSecondaryTapDown: conversationContextMenuIsDesktop(context)
-            ? (details) => showConversationContextMenu(
-                  context: context,
-                  peer: peer,
-                  preview: preview,
-                  globalPosition: details.globalPosition,
-                )
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                alignment: Alignment.center,
-                children: [
-                  UserAvatar(
-                    avatarFileId: extras.avatarFileId,
-                    initials: initials,
-                    radius: 22,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Material(
+        color: selected ? c.accentSoft : c.surface,
+        borderRadius: BorderRadius.circular(18),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          mouseCursor: SystemMouseCursors.click,
+          onTap: () {
+            messengerHapticLight();
+            openChatInApp(
+              context,
+              peerId: peer.userId,
+              username: peer.username,
+              onPeerSelected: selectionMode ? onPeerSelected : null,
+            );
+          },
+          onLongPress: conversationContextMenuIsDesktop(context)
+              ? null
+              : () => showConversationContextMenu(
+                    context: context,
+                    peer: peer,
+                    preview: preview,
                   ),
-                  if (online)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: c.success,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: c.bg, width: 2),
+          onSecondaryTapDown: conversationContextMenuIsDesktop(context)
+              ? (details) => showConversationContextMenu(
+                    context: context,
+                    peer: peer,
+                    preview: preview,
+                    globalPosition: details.globalPosition,
+                  )
+              : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    UserAvatar(
+                      avatarFileId: extras.avatarFileId,
+                      initials: initials,
+                      radius: 22,
+                    ),
+                    if (online)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: c.success,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: c.surface, width: 2),
+                          ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: c.primary,
-                              fontSize: 15,
-                              height: 1.2,
-                              fontWeight:
-                                  unread > 0 ? FontWeight.w600 : FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        if (lastMsg != null)
-                          Text(
-                            _formatTime(lastMsg.createdAt),
-                            style: TextStyle(
-                              color: unread > 0 ? c.accent : c.tertiary,
-                              fontSize: 11,
-                              height: 1.2,
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            preview,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: unread > 0 ? c.primary : c.secondary,
-                              fontSize: 13,
-                              height: 1.2,
-                            ),
-                          ),
-                        ),
-                        if (unread > 0) ...[
-                          const SizedBox(width: 8),
-                          _UnreadBadge(count: unread),
-                        ],
-                      ],
-                    ),
                   ],
                 ),
-              ),
-              if (!selectionMode) ...[
-                const SizedBox(width: 4),
-                PhosphorIcon(
-                  PhosphorAssets.caretRight,
-                  color: c.border,
-                  size: 20,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: c.primary,
+                                fontSize: 15,
+                                height: 1.2,
+                                fontWeight: unread > 0
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          if (lastMsg != null)
+                            Text(
+                              _formatTime(lastMsg.createdAt),
+                              style: TextStyle(
+                                color: unread > 0 ? c.accent : c.tertiary,
+                                fontSize: 11,
+                                height: 1.2,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              preview,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: unread > 0 ? c.primary : c.secondary,
+                                fontSize: 13,
+                                height: 1.2,
+                              ),
+                            ),
+                          ),
+                          if (unread > 0) ...[
+                            const SizedBox(width: 8),
+                            _UnreadBadge(count: unread),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
+                if (!selectionMode) ...[
+                  const SizedBox(width: 4),
+                  PhosphorIcon(
+                    PhosphorAssets.caretRight,
+                    color: c.border,
+                    size: 20,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -726,45 +764,6 @@ class _UnreadBadge extends StatelessWidget {
           fontSize: 11,
           fontWeight: FontWeight.w700,
           height: 1,
-        ),
-      ),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  final String label;
-  final double size;
-  final Color? color;
-  final Color? textColor;
-
-  const _Avatar({
-    required this.label,
-    this.size = 44,
-    this.color,
-    this.textColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.mc;
-    final bg = color ?? c.accentSoft;
-    final fg = textColor ?? c.accent;
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: bg,
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: Text(
-          label,
-          style: TextStyle(
-            color: fg,
-            fontSize: size * 0.4,
-            fontWeight: FontWeight.w600,
-          ),
         ),
       ),
     );

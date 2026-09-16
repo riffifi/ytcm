@@ -11,7 +11,9 @@ import '../widgets/user_avatar.dart';
 import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  final bool embedded;
+
+  const ProfileScreen({super.key, this.embedded = false});
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -20,6 +22,8 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
+  final _dateOfBirthCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
   bool _saving = false;
   bool _uploadingAvatar = false;
@@ -38,6 +42,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final me = context.read<AppState>().me;
     _firstNameCtrl.text = me?.firstName ?? '';
     _lastNameCtrl.text = me?.lastName ?? '';
+    _usernameCtrl.text = me?.username ?? '';
+    _dateOfBirthCtrl.text = me?.dateOfBirth ?? '';
     final extras = ProfileExtras.parse(me?.additionalInfo);
     _bioCtrl.text = extras.bio ?? '';
     _avatarFileId = extras.avatarFileId;
@@ -47,6 +53,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     _firstNameCtrl.dispose();
     _lastNameCtrl.dispose();
+    _usernameCtrl.dispose();
+    _dateOfBirthCtrl.dispose();
     _bioCtrl.dispose();
     super.dispose();
   }
@@ -62,6 +70,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final ok = await state.updateProfile(
       firstName: _firstNameCtrl.text.trim(),
       lastName: _lastNameCtrl.text.trim(),
+      username: _usernameCtrl.text.trim(),
+      dateOfBirth: _dateOfBirthCtrl.text.trim(),
       bio: _bioCtrl.text.trim(),
       avatarFileId: fileId,
     );
@@ -83,22 +93,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
-        leading: IconButton(
-          icon: PhosphorIcon(
-            adaptiveBackIcon(context),
-            size: adaptiveBackIconSize(context),
-          ),
-          onPressed: () => Navigator.pop(context),
+        automaticallyImplyLeading: !widget.embedded,
+        leading: widget.embedded
+            ? null
+            : IconButton(
+                icon: PhosphorIcon(
+                  adaptiveBackIcon(context),
+                  size: adaptiveBackIconSize(context),
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+        title: Text(
+          widget.embedded ? 'You' : 'Profile',
+          style: AppTheme.heading(c, fontSize: 26),
         ),
-        title: const Text('Profile'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: c.border),
-        ),
+        actions: widget.embedded
+            ? [
+                IconButton(
+                  tooltip: 'Settings',
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SettingsScreen(),
+                    ),
+                  ),
+                  icon: PhosphorIcon(
+                    PhosphorAssets.settings,
+                    color: c.secondary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ]
+            : null,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(24),
-        children: [
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+            children: [
           Center(
             child: Column(
               children: [
@@ -168,12 +202,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 36),
-          _SectionLabel('Profile info'),
+          const _SectionLabel('Profile info'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _usernameCtrl,
+            autocorrect: false,
+            style: TextStyle(color: c.primary, fontSize: 15),
+            decoration: const InputDecoration(hintText: 'Username'),
+          ),
           const SizedBox(height: 12),
           TextField(
             controller: _firstNameCtrl,
             style: TextStyle(color: c.primary, fontSize: 15),
             decoration: const InputDecoration(hintText: 'First name'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _dateOfBirthCtrl,
+            keyboardType: TextInputType.datetime,
+            style: TextStyle(color: c.primary, fontSize: 15),
+            decoration: const InputDecoration(
+              hintText: 'Date of birth',
+              helperText: 'Use the format expected by your server',
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -193,7 +244,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ? Container(
                   height: 50,
                   decoration: BoxDecoration(
-                    color: c.accent.withOpacity(0.5),
+                    color: c.accent.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Center(
@@ -213,11 +264,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     final ok = await state.updateProfile(
                       firstName: _firstNameCtrl.text.trim(),
                       lastName: _lastNameCtrl.text.trim(),
+                      username: _usernameCtrl.text.trim(),
+                      dateOfBirth: _dateOfBirthCtrl.text.trim(),
                       bio: _bioCtrl.text.trim(),
                       avatarFileId: avatarId,
                     );
+                    if (!context.mounted) return;
                     setState(() => _saving = false);
-                    if (!mounted) return;
                     if (ok) {
                       showMessengerSnackBar(context, 'Profile updated');
                     } else {
@@ -230,7 +283,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: const Text('Save changes'),
                 ),
           const SizedBox(height: 32),
-          _SectionLabel('More'),
+          const _SectionLabel('More'),
           const SizedBox(height: 12),
           _ActionTile(
             icon: PhosphorAssets.settings,
@@ -241,7 +294,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               MaterialPageRoute(builder: (_) => const SettingsScreen()),
             ),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

@@ -11,7 +11,8 @@ class FileLimits {
     'image/gif',
   };
 
-  static bool isImageMime(String mime) => _imageMimes.contains(mime.toLowerCase());
+  static bool isImageMime(String mime) =>
+      _imageMimes.contains(mime.toLowerCase());
 
   static bool looksLikeImage(String filename, String mimeType) {
     if (mimeType.toLowerCase().startsWith('image/')) return true;

@@ -41,43 +41,43 @@ class AppColors {
   });
 
   static const dark = AppColors(
-    bg: Color(0xFF131614),
-    surface: Color(0xFF1C1F1E),
-    surfaceHigh: Color(0xFF252928),
-    border: Color(0xFF2E3230),
-    borderSoft: Color(0xFF242726),
-    primary: Color(0xFFE3E6E4),
-    secondary: Color(0xFF878F8C),
-    tertiary: Color(0xFF545C59),
-    accent: Color(0xFF5B9E8F),
-    accentSoft: Color(0xFF1A2825),
-    accentDim: Color(0xFF3D7066),
-    bubbleOut: Color(0xFF1E2E2B),
-    bubbleOutBorder: Color(0xFF2D4A44),
-    bubbleIn: Color(0xFF1C1F1E),
-    bubbleInBorder: Color(0xFF2A2E2C),
-    error: Color(0xFFE07070),
-    success: Color(0xFF5FA876),
+    bg: Color(0xFF0E0F12),
+    surface: Color(0xFF17191E),
+    surfaceHigh: Color(0xFF202329),
+    border: Color(0xFF30333B),
+    borderSoft: Color(0xFF24272E),
+    primary: Color(0xFFF7F2E9),
+    secondary: Color(0xFFAAA7A2),
+    tertiary: Color(0xFF6F7077),
+    accent: Color(0xFFE87524),
+    accentSoft: Color(0xFF352216),
+    accentDim: Color(0xFFA94F16),
+    bubbleOut: Color(0xFF9E4816),
+    bubbleOutBorder: Color(0xFFC45E1C),
+    bubbleIn: Color(0xFF1C1F25),
+    bubbleInBorder: Color(0xFF30343D),
+    error: Color(0xFFFF716D),
+    success: Color(0xFF67C587),
   );
 
   static const light = AppColors(
-    bg: Color(0xFFF7F8F7),
-    surface: Color(0xFFFFFFFF),
-    surfaceHigh: Color(0xFFF0F2F1),
-    border: Color(0xFFD8DEDC),
-    borderSoft: Color(0xFFE8EBEA),
-    primary: Color(0xFF1A1D1C),
-    secondary: Color(0xFF5C6562),
-    tertiary: Color(0xFF8A9490),
-    accent: Color(0xFF2D7A6A),
-    accentSoft: Color(0xFFE4F2EF),
-    accentDim: Color(0xFF236657),
-    bubbleOut: Color(0xFFDCEFEA),
-    bubbleOutBorder: Color(0xFFB8DDD4),
-    bubbleIn: Color(0xFFFFFFFF),
-    bubbleInBorder: Color(0xFFD8DEDC),
-    error: Color(0xFFC44B4B),
-    success: Color(0xFF3D8B55),
+    bg: Color(0xFFF4F0E8),
+    surface: Color(0xFFFFFCF7),
+    surfaceHigh: Color(0xFFECE7DE),
+    border: Color(0xFFD8D1C5),
+    borderSoft: Color(0xFFE7E1D7),
+    primary: Color(0xFF1C1B1A),
+    secondary: Color(0xFF65615C),
+    tertiary: Color(0xFF969087),
+    accent: Color(0xFFD75F10),
+    accentSoft: Color(0xFFFFE7D2),
+    accentDim: Color(0xFFAD4708),
+    bubbleOut: Color(0xFFFFD4AD),
+    bubbleOutBorder: Color(0xFFF2B67D),
+    bubbleIn: Color(0xFFFFFCF7),
+    bubbleInBorder: Color(0xFFD8D1C5),
+    error: Color(0xFFC83E3A),
+    success: Color(0xFF27814A),
   );
 }
 
@@ -114,10 +114,13 @@ abstract final class AppFontWeight {
   static const semibold = 560.0;
   static const tab = 580.0;
   static const button = 580.0;
+
   /// App bar / chat header titles — between w600 and w700.
   static const appBar = 620.0;
+
   /// Large screen titles (e.g. Messages).
   static const heading = 680.0;
+
   /// Marketing / auth hero.
   static const display = 720.0;
 }
@@ -165,7 +168,7 @@ class AppTheme {
       );
 
   /// Primary screen title (conversation list, settings page, etc.).
-  static TextStyle heading(AppColors c, {double fontSize = 22}) => text(
+  static TextStyle heading(AppColors c, {double fontSize = 28}) => text(
         c,
         wght: AppFontWeight.heading,
         fontSize: fontSize,
@@ -244,7 +247,7 @@ class AppTheme {
               surface: c.surface,
               primary: c.accent,
               onPrimary: Colors.white,
-              secondary: c.accent,
+              secondary: c.accentDim,
               error: c.error,
               onError: Colors.white,
               onSurface: c.primary,
@@ -253,15 +256,33 @@ class AppTheme {
               surface: c.surface,
               primary: c.accent,
               onPrimary: Colors.white,
-              secondary: c.accent,
+              secondary: c.accentDim,
               error: c.error,
               onError: Colors.white,
               onSurface: c.primary,
             ),
       fontFamily: fontFamily,
+      visualDensity: VisualDensity.standard,
+      materialTapTargetSize: MaterialTapTargetSize.padded,
       textTheme: textTheme,
       primaryTextTheme: textTheme,
       dividerColor: c.borderSoft,
+      textSelectionTheme: TextSelectionThemeData(
+        cursorColor: c.accent,
+        selectionColor: c.accent.withValues(alpha: 0.28),
+        selectionHandleColor: c.accent,
+      ),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: c.accent),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.selected) ? Colors.white : c.tertiary,
+        ),
+        trackColor: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.selected) ? c.accent : c.border,
+        ),
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: c.bg,
         elevation: 0,
@@ -269,7 +290,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
         titleSpacing: 16,
-        toolbarHeight: 52,
+        toolbarHeight: 64,
         titleTextStyle: appBarTitle(c),
         iconTheme: IconThemeData(color: c.secondary, size: 22),
       ),
@@ -277,15 +298,38 @@ class AppTheme {
         backgroundColor: c.surfaceHigh,
         contentTextStyle: text(c, fontSize: 14),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
       ),
       dialogTheme: DialogThemeData(
+        backgroundColor: c.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         titleTextStyle: appBarTitle(c),
         contentTextStyle: text(c, fontSize: 15, height: 1.45),
       ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: c.surface,
+        modalBackgroundColor: c.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: c.surface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: c.borderSoft),
+        ),
+      ),
       listTileTheme: ListTileThemeData(
         titleTextStyle: text(c, fontSize: 15, wght: AppFontWeight.medium),
-        subtitleTextStyle: text(c, color: c.secondary, fontSize: 13, height: 1.35),
+        subtitleTextStyle:
+            text(c, color: c.secondary, fontSize: 13, height: 1.35),
       ),
       tabBarTheme: TabBarThemeData(
         labelStyle: text(c, fontSize: 14, wght: AppFontWeight.tab),
@@ -301,15 +345,15 @@ class AppTheme {
         fillColor: c.surfaceHigh,
         hintStyle: text(c, color: c.tertiary, fontSize: 15),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: c.border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(13),
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: c.accent, width: 1.5),
         ),
         contentPadding:
@@ -332,9 +376,9 @@ class AppTheme {
           backgroundColor: c.accent,
           foregroundColor: Colors.white,
           elevation: 0,
-          minimumSize: const Size(double.infinity, 52),
+          minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(13),
+            borderRadius: BorderRadius.circular(16),
           ),
           textStyle: text(
             c,
@@ -356,22 +400,69 @@ class AppTheme {
           ),
         ),
       ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: c.primary,
+          minimumSize: const Size(0, 50),
+          side: BorderSide(color: c.border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          textStyle: text(c, fontSize: 14, wght: AppFontWeight.semibold),
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        height: 72,
+        elevation: 0,
+        backgroundColor: c.surface,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: c.accentSoft,
+        iconTheme: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return IconThemeData(color: selected ? c.accent : c.tertiary);
+        }),
+        labelTextStyle: WidgetStateProperty.resolveWith((states) {
+          final selected = states.contains(WidgetState.selected);
+          return text(
+            c,
+            color: selected ? c.accent : c.tertiary,
+            fontSize: 11,
+            wght: selected ? AppFontWeight.semibold : AppFontWeight.medium,
+          );
+        }),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: c.surfaceHigh,
+        selectedColor: c.accentSoft,
+        side: BorderSide(color: c.borderSoft),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        labelStyle: text(c, fontSize: 13, wght: AppFontWeight.medium),
+      ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: c.accent,
         foregroundColor: Colors.white,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
       ),
     );
   }
 
-  static ThemeData dark([AppColors? palette]) => themeFor(Brightness.dark, palette);
+  static ThemeData dark([AppColors? palette]) =>
+      themeFor(Brightness.dark, palette);
   static ThemeData light([AppColors? palette]) =>
       themeFor(Brightness.light, palette);
 
   static SystemUiOverlayStyle overlayFor(Brightness brightness) {
+    final dark = brightness == Brightness.dark;
     return SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness:
-          brightness == Brightness.light ? Brightness.dark : Brightness.light,
+      statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+      statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor:
+          dark ? AppColors.dark.surface : AppColors.light.surface,
+      systemNavigationBarIconBrightness:
+          dark ? Brightness.light : Brightness.dark,
+      systemNavigationBarDividerColor: Colors.transparent,
     );
   }
 }

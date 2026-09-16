@@ -26,8 +26,6 @@ class ServerEndpoints {
 
   static Future<bool> get isConfigured async {
     final urls = await fromPrefs();
-    return urls.authUrl != null &&
-        urls.chatUrl != null &&
-        urls.fileUrl != null;
+    return urls.authUrl != null && urls.chatUrl != null && urls.fileUrl != null;
   }
 }

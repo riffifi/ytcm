@@ -52,19 +52,19 @@ class ServerSettings extends ChangeNotifier {
       final storedFile = prefs.getString(ServerEndpoints.prefsKeyFile)?.trim();
 
       if (storedAuth != null && storedAuth.isNotEmpty) {
-        _authUrl = storedAuth;
+        _authUrl = _normalizeHttpUrl(storedAuth);
       } else if (_allowDesktopDefaults) {
         _authUrl = desktopAuthDefault;
       }
 
       if (storedChat != null && storedChat.isNotEmpty) {
-        _chatUrl = storedChat;
+        _chatUrl = _normalizeWebSocketUrl(storedChat);
       } else if (_allowDesktopDefaults) {
         _chatUrl = desktopChatDefault;
       }
 
       if (storedFile != null && storedFile.isNotEmpty) {
-        _fileUrl = storedFile;
+        _fileUrl = _normalizeWebSocketUrl(storedFile);
       } else if (_allowDesktopDefaults) {
         _fileUrl = desktopFileDefault;
       }
@@ -89,9 +89,9 @@ class ServerSettings extends ChangeNotifier {
     String? tenorApiKey,
   }) async {
     final prefs = await SharedPreferences.getInstance();
-    _authUrl = authUrl.trim();
-    _chatUrl = chatUrl.trim();
-    _fileUrl = fileUrl.trim();
+    _authUrl = _normalizeHttpUrl(authUrl);
+    _chatUrl = _normalizeWebSocketUrl(chatUrl);
+    _fileUrl = _normalizeWebSocketUrl(fileUrl);
     final tenor = tenorApiKey?.trim();
     _tenorApiKey = (tenor == null || tenor.isEmpty) ? null : tenor;
     await prefs.setString(ServerEndpoints.prefsKeyAuth, _authUrl);
@@ -103,6 +103,24 @@ class ServerSettings extends ChangeNotifier {
       await prefs.remove(_keyTenor);
     }
     notifyListeners();
+  }
+
+  static String _normalizeHttpUrl(String value) {
+    var result = value.trim();
+    while (result.endsWith('/')) {
+      result = result.substring(0, result.length - 1);
+    }
+    return result;
+  }
+
+  static String _normalizeWebSocketUrl(String value) {
+    final trimmed = value.trim();
+    final uri = Uri.tryParse(trimmed);
+    if (uri == null || uri.host.isEmpty) return trimmed;
+    if (uri.path.isEmpty || uri.path == '/') {
+      return uri.replace(path: '/ws').toString();
+    }
+    return uri.toString();
   }
 
   Future<void> reset() async {

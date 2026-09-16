@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -14,6 +15,8 @@ import '../utils/messenger_snackbar.dart';
 import '../widgets/chat_composer.dart';
 import '../widgets/file_attachment.dart';
 import '../widgets/message_body.dart';
+import '../widgets/connection_banner.dart';
+import '../widgets/upload_progress_banner.dart';
 
 class _GroupListSnapshot {
   final List<GroupMessage> messages;
@@ -122,12 +125,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         );
       },
     );
-    if (added != true || !mounted) return;
+    final username = usernameCtrl.text;
+    usernameCtrl.dispose();
+    if (added != true || !context.mounted) return;
 
     final state = context.read<AppState>();
-    final error = await state.addGroupMemberByUsername(usernameCtrl.text);
-    usernameCtrl.dispose();
-    if (!mounted) return;
+    final error = await state.addGroupMemberByUsername(username);
+    if (!context.mounted) return;
     if (error != null) {
       showMessengerSnackBar(context, error);
     } else {
@@ -146,6 +150,48 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (mounted) _scrollToBottom();
     });
+  }
+
+  Future<void> _showMessageActions(GroupMessage message, bool isMe) async {
+    messengerHapticSelection();
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (message.text?.trim().isNotEmpty == true)
+              ListTile(
+                leading: const Icon(Icons.copy_outlined),
+                title: const Text('Copy text'),
+                onTap: () => Navigator.pop(sheetContext, 'copy'),
+              ),
+            if (!message.uuid.startsWith('local-'))
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Delete for me'),
+                onTap: () => Navigator.pop(sheetContext, 'delete_me'),
+              ),
+            if (isMe && !message.uuid.startsWith('local-'))
+              ListTile(
+                leading: const Icon(Icons.delete_forever_outlined),
+                title: const Text('Delete for everyone'),
+                onTap: () => Navigator.pop(sheetContext, 'delete_everyone'),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'copy') {
+      await Clipboard.setData(ClipboardData(text: message.text!.trim()));
+      if (mounted) showMessengerSnackBar(context, 'Message copied');
+      return;
+    }
+    context.read<AppState>().deleteGroupMessage(
+          message,
+          forEveryone: action == 'delete_everyone',
+        );
   }
 
   @override
@@ -174,10 +220,55 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
             tooltip: 'Add member',
             onPressed: () => _showAddMember(context),
           ),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value != 'leave') return;
+              final leave = await showDialog<bool>(
+                context: context,
+                builder: (dialogContext) => AlertDialog(
+                  title: const Text('Leave group?'),
+                  content: const Text(
+                    'You will stop receiving messages from this group.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      child: const Text('Leave'),
+                    ),
+                  ],
+                ),
+              );
+              if (leave != true || !context.mounted) return;
+              context.read<AppState>().leaveActiveGroup();
+              Navigator.pop(context);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'leave', child: Text('Leave group')),
+            ],
+          ),
         ],
       ),
       body: Column(
         children: [
+          Selector<AppState, ({bool connected, String? status})>(
+            selector: (_, state) => (
+              connected: state.chat.isConnected,
+              status: state.chatStatus,
+            ),
+            builder: (_, connection, __) => ConnectionBanner(
+              connected: connection.connected,
+              message: connection.status,
+            ),
+          ),
+          Selector<AppState, double?>(
+            selector: (_, state) => state.uploadProgress,
+            builder: (_, progress, __) =>
+                UploadProgressBanner(progress: progress),
+          ),
           Expanded(
             child: Selector<AppState, _GroupListSnapshot>(
               selector: (_, s) {
@@ -197,7 +288,8 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                       child: Text(
                         'No messages yet — say hello',
                         textAlign: TextAlign.center,
-                        style: AppTheme.text(c, color: c.secondary, fontSize: 14),
+                        style:
+                            AppTheme.text(c, color: c.secondary, fontSize: 14),
                       ),
                     ),
                   );
@@ -210,18 +302,24 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   controller: _scrollCtrl,
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
-                  cacheExtent: 280,
                   addAutomaticKeepAlives: false,
                   padding: const EdgeInsets.all(16),
                   itemCount: snap.messages.length,
                   itemBuilder: (context, i) {
                     final msg = snap.messages[i];
+                    final isMe = msg.senderId == meId;
                     return _GroupBubble(
                       key: ValueKey(msg.uuid),
                       message: msg,
-                      isMe: msg.senderId == meId,
+                      isMe: isMe,
                       colors: c,
                       maxBubbleWidth: maxW,
+                      senderName: isMe
+                          ? null
+                          : context
+                              .read<AppState>()
+                              .peerDisplayName(msg.senderId),
+                      onLongPress: () => _showMessageActions(msg, isMe),
                     );
                   },
                 );
@@ -240,6 +338,8 @@ class _GroupBubble extends StatelessWidget {
   final bool isMe;
   final AppColors colors;
   final double maxBubbleWidth;
+  final String? senderName;
+  final VoidCallback? onLongPress;
 
   const _GroupBubble({
     super.key,
@@ -247,6 +347,8 @@ class _GroupBubble extends StatelessWidget {
     required this.isMe,
     required this.colors,
     required this.maxBubbleWidth,
+    this.senderName,
+    this.onLongPress,
   });
 
   @override
@@ -258,61 +360,67 @@ class _GroupBubble extends StatelessWidget {
           alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: isMe ? colors.bubbleOut : colors.bubbleIn,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(isMe ? 18 : 6),
-                  bottomRight: Radius.circular(isMe ? 6 : 18),
+            child: GestureDetector(
+              onLongPress: onLongPress,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isMe ? colors.bubbleOut : colors.bubbleIn,
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(18),
+                    topRight: const Radius.circular(18),
+                    bottomLeft: Radius.circular(isMe ? 18 : 6),
+                    bottomRight: Radius.circular(isMe ? 6 : 18),
+                  ),
+                  border: Border.all(
+                    color:
+                        isMe ? colors.bubbleOutBorder : colors.bubbleInBorder,
+                  ),
                 ),
-                border: Border.all(
-                  color: isMe ? colors.bubbleOutBorder : colors.bubbleInBorder,
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment:
-                    isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (!isMe)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        message.senderId.length > 8
-                            ? message.senderId.substring(0, 8)
-                            : message.senderId,
-                        style: TextStyle(
-                          color: colors.accent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                child: Column(
+                  crossAxisAlignment:
+                      isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!isMe)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          senderName ??
+                              (message.senderId.length > 8
+                                  ? message.senderId.substring(0, 8)
+                                  : message.senderId),
+                          style: TextStyle(
+                            color: colors.accent,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                  if (message.fileId != null && message.fileId!.isNotEmpty)
-                    FileAttachment(
-                      key: ValueKey('file-${message.fileId}'),
-                      fileId: message.fileId!,
-                      isMe: isMe,
-                    ),
-                  if (message.text != null && message.text!.trim().isNotEmpty)
-                    MessageBody(
-                      text: message.text,
-                      colors: colors,
-                      textStyle: TextStyle(
-                        color: colors.primary,
-                        fontSize: 15,
-                        height: 1.4,
+                    if (message.fileId != null && message.fileId!.isNotEmpty)
+                      FileAttachment(
+                        key: ValueKey('file-${message.fileId}'),
+                        fileId: message.fileId!,
+                        isMe: isMe,
                       ),
+                    if (message.text != null && message.text!.trim().isNotEmpty)
+                      MessageBody(
+                        text: message.text,
+                        colors: colors,
+                        textStyle: TextStyle(
+                          color: colors.primary,
+                          fontSize: 15,
+                          height: 1.4,
+                        ),
+                      ),
+                    const SizedBox(height: 4),
+                    Text(
+                      DateFormat('HH:mm').format(message.createdAt),
+                      style: TextStyle(color: colors.tertiary, fontSize: 10),
                     ),
-                  const SizedBox(height: 4),
-                  Text(
-                    DateFormat('HH:mm').format(message.createdAt),
-                    style: TextStyle(color: colors.tertiary, fontSize: 10),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
