@@ -10,6 +10,7 @@ import '../theme.dart';
 import '../utils/platform_ui.dart';
 import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_snackbar.dart';
+import '../widgets/app_components.dart';
 
 class ServerSettingsScreen extends StatefulWidget {
   const ServerSettingsScreen({super.key});
@@ -166,7 +167,7 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
     final c = context.mc;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: TextStyle(color: c.primary)),
+        content: Text(msg, style: AppTheme.text(c)),
         backgroundColor: c.error.withValues(alpha: 0.92),
         behavior: SnackBarBehavior.floating,
       ),
@@ -204,117 +205,118 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
           child: ListView(
             padding: EdgeInsets.fromLTRB(20, 20, 20, 32 + bottomInset),
             children: [
-          _infoBox(context),
-          const SizedBox(height: 20),
-          _label(context, 'Auth service'),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _authCtrl,
-            decoration: InputDecoration(
-              hintText: 'http://192.168.1.10:3000',
-              prefixIcon: PhosphorIcon.forInput(
-                PhosphorAssets.lock,
-                color: c.secondary,
+              const InlineNotice(
+                'Use the same host/IP as your messenger servers (LAN IP on a phone, not 127.0.0.1). Saved here is used everywhere, including background notifications.',
               ),
-            ),
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-          ),
-          const SizedBox(height: 8),
-          _pingRow(
-            context: context,
-            label: 'Test auth',
-            loading: _pingingAuth,
-            result: _authPingResult,
-            onPressed: _pingAuth,
-          ),
-          const SizedBox(height: 6),
-          Text('HTTP — login, register, profile',
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 20),
-          _label(context, 'Chat service'),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _chatCtrl,
-            decoration: InputDecoration(
-              hintText: 'ws://192.168.1.10:3001/ws',
-              prefixIcon: PhosphorIcon.forInput(
-                PhosphorAssets.arrowsLeftRight,
-                color: c.secondary,
-              ),
-            ),
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-          ),
-          const SizedBox(height: 8),
-          _pingRow(
-            context: context,
-            label: 'Test chat',
-            loading: _pingingChat,
-            result: _chatPingResult,
-            onPressed: _pingChat,
-          ),
-          const SizedBox(height: 6),
-          Text('WebSocket — real-time messaging',
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 20),
-          _label(context, 'File service'),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _fileCtrl,
-            decoration: InputDecoration(
-              hintText: 'ws://192.168.1.10:25463/ws',
-              prefixIcon: PhosphorIcon.forInput(
-                PhosphorAssets.attach,
-                color: c.secondary,
-              ),
-            ),
-            keyboardType: TextInputType.url,
-            autocorrect: false,
-          ),
-          const SizedBox(height: 8),
-          _pingRow(
-            context: context,
-            label: 'Test file service',
-            loading: _pingingFile,
-            result: _filePingResult,
-            onPressed: _pingFile,
-          ),
-          const SizedBox(height: 6),
-          Text('WebSocket — upload, download, and file sharing',
-              style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(height: 20),
-          _label(context, 'Tenor API key (GIF search)'),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _tenorCtrl,
-            decoration: InputDecoration(
-              hintText: 'Optional — uses built-in test key if empty',
-              prefixIcon: PhosphorIcon.forInput(
-                PhosphorAssets.gif,
-                color: c.secondary,
-              ),
-            ),
-            autocorrect: false,
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Get a free key at console.cloud.google.com (Tenor API). '
-            'Leave blank to use the default search key.',
-            style: Theme.of(context).textTheme.bodyMedium,
-          ),
-          const SizedBox(height: 28),
-          _saving
-              ? _loadingButton(context)
-              : ElevatedButton(
-                  onPressed: _save,
-                  child: const Text('Save & apply'),
+              const SizedBox(height: 20),
+              const SectionLabel('Auth service'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _authCtrl,
+                decoration: InputDecoration(
+                  hintText: 'http://192.168.1.10:3000',
+                  prefixIcon: PhosphorIcon.forInput(
+                    PhosphorAssets.lock,
+                    color: c.secondary,
+                  ),
                 ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: _reset,
-            child: const Text('Reset to defaults'),
-          ),
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+              ),
+              const SizedBox(height: 8),
+              _pingRow(
+                context: context,
+                label: 'Test auth',
+                loading: _pingingAuth,
+                result: _authPingResult,
+                onPressed: _pingAuth,
+              ),
+              const SizedBox(height: 6),
+              Text('HTTP — login, register, profile',
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 20),
+              const SectionLabel('Chat service'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _chatCtrl,
+                decoration: InputDecoration(
+                  hintText: 'ws://192.168.1.10:3001/ws',
+                  prefixIcon: PhosphorIcon.forInput(
+                    PhosphorAssets.arrowsLeftRight,
+                    color: c.secondary,
+                  ),
+                ),
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+              ),
+              const SizedBox(height: 8),
+              _pingRow(
+                context: context,
+                label: 'Test chat',
+                loading: _pingingChat,
+                result: _chatPingResult,
+                onPressed: _pingChat,
+              ),
+              const SizedBox(height: 6),
+              Text('WebSocket — real-time messaging',
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 20),
+              const SectionLabel('File service'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _fileCtrl,
+                decoration: InputDecoration(
+                  hintText: 'ws://192.168.1.10:25463/ws',
+                  prefixIcon: PhosphorIcon.forInput(
+                    PhosphorAssets.attach,
+                    color: c.secondary,
+                  ),
+                ),
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+              ),
+              const SizedBox(height: 8),
+              _pingRow(
+                context: context,
+                label: 'Test file service',
+                loading: _pingingFile,
+                result: _filePingResult,
+                onPressed: _pingFile,
+              ),
+              const SizedBox(height: 6),
+              Text('WebSocket — upload, download, and file sharing',
+                  style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(height: 20),
+              const SectionLabel('Tenor API key (GIF search)'),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _tenorCtrl,
+                decoration: InputDecoration(
+                  hintText: 'Optional — uses built-in test key if empty',
+                  prefixIcon: PhosphorIcon.forInput(
+                    PhosphorAssets.gif,
+                    color: c.secondary,
+                  ),
+                ),
+                autocorrect: false,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Get a free key at console.cloud.google.com (Tenor API). '
+                'Leave blank to use the default search key.',
+                style: AppTheme.caption(c),
+              ),
+              const SizedBox(height: 28),
+              LoadingButton(
+                loading: _saving,
+                label: 'Save & apply',
+                onPressed: _save,
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _reset,
+                child: const Text('Reset to defaults'),
+              ),
             ],
           ),
         ),
@@ -347,78 +349,21 @@ class _ServerSettingsScreenState extends State<ServerSettingsScreen> {
                   height: 14,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const PhosphorIcon(PhosphorAssets.testConnection, size: 16),
+              : const PhosphorIcon(
+                  PhosphorAssets.pulse,
+                  size: 16,
+                  semanticLabel: 'Test connection',
+                ),
           label: Text(label),
         ),
         if (result != null) ...[
           const SizedBox(height: 6),
           Text(
             result,
-            style: TextStyle(
-              color: failed ? c.error : c.accent,
-              fontSize: 12,
-              height: 1.4,
-            ),
+            style: AppTheme.caption(c, color: failed ? c.error : c.accent),
           ),
         ],
       ],
-    );
-  }
-
-  Widget _infoBox(BuildContext context) {
-    final c = context.mc;
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: c.accentSoft,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: c.accent.withValues(alpha: 0.25)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          PhosphorIcon(PhosphorAssets.info, color: c.accent, size: 16),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Use the same host/IP as your messenger servers (LAN IP on a phone, '
-              'not 127.0.0.1). Saved here is used everywhere, including background notifications.',
-              style: TextStyle(
-                color: c.accent.withValues(alpha: 0.85),
-                fontSize: 12,
-                height: 1.5,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _label(BuildContext context, String text) {
-    final c = context.mc;
-    return Text(
-      text.toUpperCase(),
-      style: AppTheme.sectionLabel(c),
-    );
-  }
-
-  Widget _loadingButton(BuildContext context) {
-    final c = context.mc;
-    return Container(
-      height: 50,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: c.accent.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: const Center(
-        child: SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-        ),
-      ),
     );
   }
 }

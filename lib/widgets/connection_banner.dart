@@ -15,7 +15,7 @@ class ConnectionBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedSize(
-      duration: const Duration(milliseconds: 180),
+      duration: AppMotion.base,
       curve: Curves.easeOut,
       child: connected
           ? const SizedBox(width: double.infinity)
@@ -39,11 +39,8 @@ class ConnectionBanner extends StatelessWidget {
                     child: Text(
                       message ?? 'Reconnecting… Messages will be queued.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: context.mc.accent,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
+                      style: AppTheme.caption(context.mc,
+                          color: context.mc.accent),
                     ),
                   ),
                 ],

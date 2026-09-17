@@ -19,7 +19,7 @@ class UploadProgressBanner extends StatelessWidget {
         children: [
           Expanded(
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: BorderRadius.circular(AppRadius.xs),
               child: LinearProgressIndicator(
                 value: value,
                 minHeight: 5,
@@ -31,7 +31,7 @@ class UploadProgressBanner extends StatelessWidget {
           const SizedBox(width: 10),
           Text(
             'Uploading $percent%',
-            style: TextStyle(color: context.mc.secondary, fontSize: 12),
+            style: AppTheme.caption(context.mc),
           ),
         ],
       ),

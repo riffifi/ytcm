@@ -18,6 +18,8 @@ import '../utils/scroll_utils.dart';
 import '../widgets/chat_message_tile.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/upload_progress_banner.dart';
+import '../widgets/message_action_sheet.dart';
+import '../widgets/app_components.dart';
 
 class _ChatListSnapshot {
   final List<Message> messages;
@@ -94,7 +96,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     _scrollCtrl.animateTo(
       target,
-      duration: const Duration(milliseconds: 160),
+      duration: AppMotion.base,
       curve: Curves.easeOutCubic,
     );
   }
@@ -156,43 +158,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _showMessageActions(Message message, bool isMe) async {
     messengerHapticSelection();
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (message.text?.trim().isNotEmpty == true)
-              ListTile(
-                leading: const Icon(Icons.copy_outlined),
-                title: const Text('Copy text'),
-                onTap: () => Navigator.pop(sheetContext, 'copy'),
-              ),
-            if (!message.uuid.startsWith('local-'))
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Delete for me'),
-                onTap: () => Navigator.pop(sheetContext, 'delete_me'),
-              ),
-            if (isMe && !message.uuid.startsWith('local-'))
-              ListTile(
-                leading: const Icon(Icons.delete_forever_outlined),
-                title: const Text('Delete for everyone'),
-                onTap: () => Navigator.pop(sheetContext, 'delete_everyone'),
-              ),
-          ],
-        ),
-      ),
+    final action = await showMessageActionSheet(
+      context,
+      canCopy: message.text?.trim().isNotEmpty == true,
+      canDeleteForMe: !message.uuid.startsWith('local-'),
+      canDeleteForEveryone: isMe && !message.uuid.startsWith('local-'),
     );
     if (!mounted || action == null) return;
-    if (action == 'copy') {
+    if (action == MessageAction.copy) {
       await Clipboard.setData(ClipboardData(text: message.text!.trim()));
       if (mounted) showMessengerSnackBar(context, 'Message copied');
       return;
     }
     context.read<AppState>().deleteMessage(
           message,
-          forEveryone: action == 'delete_everyone',
+          forEveryone: action == MessageAction.deleteForEveryone,
         );
   }
 
@@ -248,7 +228,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       final name = peerId != null
                           ? context.read<AppState>().peerDisplayName(peerId)
                           : '';
-                      return _emptyState(c, name);
+                      return _emptyState(name);
                     }
 
                     final maxW = MediaQuery.sizeOf(context).width * 0.78;
@@ -275,11 +255,31 @@ class _ChatScreenState extends State<ChatScreen> {
                                   snap.messages[i - 1].createdAt,
                                   msg.createdAt,
                                 );
+                            final startsSequence = i == 0 ||
+                                !messagesFormSequence(
+                                  firstSenderId: snap.messages[i - 1].senderId,
+                                  firstCreatedAt:
+                                      snap.messages[i - 1].createdAt,
+                                  secondSenderId: msg.senderId,
+                                  secondCreatedAt: msg.createdAt,
+                                );
+                            final endsSequence =
+                                i == snap.messages.length - 1 ||
+                                    !messagesFormSequence(
+                                      firstSenderId: msg.senderId,
+                                      firstCreatedAt: msg.createdAt,
+                                      secondSenderId:
+                                          snap.messages[i + 1].senderId,
+                                      secondCreatedAt:
+                                          snap.messages[i + 1].createdAt,
+                                    );
                             return ChatMessageTile(
                               key: ValueKey(msg.uuid),
                               message: msg,
                               isMe: isMe,
                               showDate: showDate,
+                              startsSequence: startsSequence,
+                              endsSequence: endsSequence,
                               animate: shouldAnimateChatMessage(
                                 message: msg,
                                 index: i,
@@ -373,44 +373,11 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _emptyState(AppColors c, String username) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: c.accentSoft,
-                shape: BoxShape.circle,
-              ),
-              child: PhosphorIcon(
-                PhosphorAssets.handWave,
-                color: c.accent,
-                size: 28,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Say hi to $username',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: c.primary,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Messages are delivered when they come online',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: c.secondary, fontSize: 13, height: 1.4),
-            ),
-          ],
-        ),
-      ),
+  Widget _emptyState(String username) {
+    return EmptyState(
+      icon: PhosphorAssets.handWave,
+      title: 'Say hi to $username',
+      message: 'Messages are delivered when they come online.',
     );
   }
 }
@@ -439,7 +406,7 @@ class _ScrollDownFab extends StatelessWidget {
           ignoring: !visible,
           child: AnimatedOpacity(
             opacity: visible ? 1 : 0,
-            duration: const Duration(milliseconds: 120),
+            duration: AppMotion.fast,
             child: Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: Material(

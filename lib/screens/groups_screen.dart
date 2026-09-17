@@ -1,242 +1,287 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../models/group_models.dart';
-import '../services/app_state.dart';
 import '../icons/phosphor_assets.dart';
+import '../services/app_state.dart';
 import '../theme.dart';
-import '../utils/platform_ui.dart';
-import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 import '../utils/messenger_snackbar.dart';
+import '../utils/platform_ui.dart';
+import '../widgets/app_components.dart';
+import '../widgets/phosphor_icon.dart';
+import '../widgets/user_avatar.dart';
 import 'group_chat_screen.dart';
 
-class GroupsScreen extends StatelessWidget {
+class GroupsScreen extends StatefulWidget {
   final bool embedded;
-
   const GroupsScreen({super.key, this.embedded = false});
+
+  @override
+  State<GroupsScreen> createState() => _GroupsScreenState();
+}
+
+class _GroupsScreenState extends State<GroupsScreen> {
+  String _query = '';
+
+  String _time(DateTime date) {
+    final days = DateTime.now().difference(date).inDays;
+    if (days == 0) return DateFormat('HH:mm').format(date);
+    if (days == 1) return 'Yesterday';
+    if (days < 7) return DateFormat('EEE').format(date);
+    return DateFormat('dd/MM').format(date);
+  }
 
   @override
   Widget build(BuildContext context) {
     final c = context.mc;
+    final state = context.watch<AppState>();
+    final q = _query.trim().toLowerCase();
+    final groups = state.groups
+        .where((g) =>
+            q.isEmpty ||
+            g.name.toLowerCase().contains(q) ||
+            (g.description ?? '').toLowerCase().contains(q))
+        .toList();
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
-        automaticallyImplyLeading: !embedded,
-        title: Text('Groups', style: AppTheme.heading(c, fontSize: 26)),
-        leading: embedded
+        automaticallyImplyLeading: !widget.embedded,
+        leading: widget.embedded
             ? null
             : IconButton(
-                icon: PhosphorIcon(
-                  adaptiveBackIcon(context),
-                  size: adaptiveBackIconSize(context),
-                ),
+                tooltip: 'Back',
+                icon: PhosphorIcon(adaptiveBackIcon(context),
+                    size: adaptiveBackIconSize(context)),
                 onPressed: () => Navigator.pop(context),
               ),
+        title: Text('Groups', style: AppTheme.heading(c, fontSize: 26)),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(62),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpace.lg, AppSpace.xs, AppSpace.lg, AppSpace.md),
+            child: TextField(
+              onChanged: (value) => setState(() => _query = value),
+              style: AppTheme.text(c),
+              decoration: InputDecoration(
+                hintText: 'Search groups and channels',
+                prefixIcon: PhosphorIcon.forInput(PhosphorAssets.search,
+                    color: c.tertiary),
+              ),
+            ),
+          ),
+        ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showCreateGroup(context),
+        heroTag: 'create-group',
+        tooltip: 'Create group',
+        onPressed: () => _create(context),
         child: const PhosphorIcon(PhosphorAssets.userAdd),
       ),
-      body: Selector<AppState, List<ChatGroup>>(
-        selector: (_, s) => s.groups,
-        builder: (context, groups, _) {
-          if (groups.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    PhosphorIcon(
-                      PhosphorAssets.groups,
-                      size: 40,
-                      color: c.border,
+      body: RefreshIndicator(
+        onRefresh: state.refreshGroups,
+        child: groups.isEmpty
+            ? ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  SizedBox(
+                    height: MediaQuery.sizeOf(context).height * .6,
+                    child: EmptyState(
+                      icon: q.isEmpty
+                          ? PhosphorAssets.groups
+                          : PhosphorAssets.search,
+                      title: q.isEmpty ? 'No groups yet' : 'No matches',
+                      message: q.isEmpty
+                          ? 'Create a group or channel to bring everyone together.'
+                          : 'Try a different name or description.',
                     ),
-                    const SizedBox(height: 12),
-                    Text(
-                      'No groups yet',
-                      style: AppTheme.text(
-                        c,
-                        fontSize: 15,
-                        wght: AppFontWeight.medium,
+                  ),
+                ],
+              )
+            : ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpace.md, AppSpace.sm, AppSpace.md, 96),
+                itemCount: groups.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: AppSpace.sm),
+                itemBuilder: (context, index) {
+                  final group = groups[index];
+                  final last = state.getLastGroupMessage(group.uuid);
+                  final unread = state.getGroupUnreadCount(group.uuid);
+                  final preview = last?.previewText.isNotEmpty == true
+                      ? last!.previewText
+                      : group.description?.trim().isNotEmpty == true
+                          ? group.description!
+                          : group.isChannel
+                              ? 'Channel'
+                              : 'Group';
+                  return SurfaceCard(
+                    padding: EdgeInsets.zero,
+                    onTap: () {
+                      messengerHapticSelection();
+                      state.openGroupChat(group.uuid, group.name);
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const GroupChatScreen()));
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpace.lg, vertical: AppSpace.md),
+                      child: Row(
+                        children: [
+                          UserAvatar(
+                              avatarFileId: group.avatarId,
+                              initials: group.name,
+                              radius: 24),
+                          const SizedBox(width: AppSpace.md),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(group.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTheme.listTitle(c,
+                                        emphasized: unread > 0)),
+                                const SizedBox(height: AppSpace.xs),
+                                Text(preview,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTheme.caption(c)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: AppSpace.sm),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              if (last != null)
+                                Text(_time(last.createdAt),
+                                    style: AppTheme.timestamp(c)),
+                              if (unread > 0) ...[
+                                const SizedBox(height: AppSpace.sm),
+                                Container(
+                                  constraints:
+                                      const BoxConstraints(minWidth: 22),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: c.accent,
+                                    borderRadius:
+                                        BorderRadius.circular(AppRadius.lg),
+                                  ),
+                                  child: Text(unread > 99 ? '99+' : '$unread',
+                                      textAlign: TextAlign.center,
+                                      style: AppTheme.timestamp(c,
+                                          color: Colors.white)),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Tap + to create a group or channel',
-                      textAlign: TextAlign.center,
-                      style: AppTheme.text(c, color: c.secondary, fontSize: 13),
-                    ),
-                  ],
-                ),
+                  );
+                },
               ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
-            itemCount: groups.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 8),
-            itemBuilder: (context, i) {
-              final group = groups[i];
-              return Card(
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  leading: Container(
-                    width: 46,
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: c.accentSoft,
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Center(
-                      child: PhosphorIcon(
-                        group.isChannel
-                            ? PhosphorAssets.megaphone
-                            : PhosphorAssets.groups,
-                        color: c.accent,
-                      ),
-                    ),
-                  ),
-                  title: Text(
-                    group.name,
-                    style: TextStyle(
-                      color: c.primary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  subtitle: group.description != null &&
-                          group.description!.isNotEmpty
-                      ? Text(
-                          group.description!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(color: c.secondary, fontSize: 13),
-                        )
-                      : Text(
-                          group.isChannel ? 'Channel' : 'Group',
-                          style: TextStyle(color: c.tertiary, fontSize: 12),
-                        ),
-                  onTap: () {
-                    messengerHapticSelection();
-                    context
-                        .read<AppState>()
-                        .openGroupChat(group.uuid, group.name);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const GroupChatScreen(),
-                      ),
-                    );
-                  },
-                ),
-              );
-            },
-          );
-        },
       ),
     );
   }
 
-  Future<void> _showCreateGroup(BuildContext context) async {
-    final nameCtrl = TextEditingController();
-    final descriptionCtrl = TextEditingController();
-    final membersCtrl = TextEditingController();
+  Future<void> _create(BuildContext context) async {
+    final name = TextEditingController();
+    final description = TextEditingController();
+    final members = TextEditingController();
     var isPrivate = false;
     var isChannel = false;
-    final ok = await showDialog<bool>(
+    String? avatarId;
+    final created = await showDialog<bool>(
       context: context,
-      builder: (ctx) {
-        final c = ctx.mc;
-        return StatefulBuilder(
-          builder: (ctx, setDialogState) => AlertDialog(
-            backgroundColor: c.surface,
-            title: Text('New group', style: TextStyle(color: c.primary)),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextField(
-                    controller: nameCtrl,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('New group'),
+          content: SingleChildScrollView(
+            child: SizedBox(
+              width: 420,
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                AvatarPicker(
+                  currentFileId: avatarId,
+                  fallbackInitials: name.text.isEmpty ? 'G' : name.text,
+                  onPick: () => context
+                      .read<AppState>()
+                      .uploadAvatarImage(shareWithContacts: false),
+                  onPicked: (id) => setDialogState(() => avatarId = id),
+                ),
+                const SizedBox(height: AppSpace.xl),
+                TextField(
+                    controller: name,
                     autofocus: true,
-                    decoration: const InputDecoration(labelText: 'Group name'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: descriptionCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Description (optional)',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: membersCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Add members (optional)',
-                      hintText: 'usernames, separated by commas',
-                    ),
-                    maxLines: 2,
-                  ),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Channel'),
-                    subtitle: const Text('Broadcast-style group'),
-                    value: isChannel,
-                    onChanged: (value) =>
-                        setDialogState(() => isChannel = value),
-                  ),
-                  SwitchListTile.adaptive(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Private'),
-                    value: isPrivate,
-                    onChanged: (value) =>
-                        setDialogState(() => isPrivate = value),
-                  ),
-                ],
-              ),
+                    decoration: const InputDecoration(labelText: 'Group name')),
+                const SizedBox(height: AppSpace.md),
+                TextField(
+                    controller: description,
+                    decoration:
+                        const InputDecoration(labelText: 'Description')),
+                const SizedBox(height: AppSpace.md),
+                TextField(
+                  controller: members,
+                  maxLines: 2,
+                  decoration: const InputDecoration(
+                      labelText: 'Members',
+                      hintText: 'Usernames separated by commas'),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Channel'),
+                  subtitle: const Text('Broadcast-style conversation'),
+                  trailing: AppSwitch(
+                      value: isChannel,
+                      onChanged: (v) => setDialogState(() => isChannel = v)),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Private'),
+                  trailing: AppSwitch(
+                      value: isPrivate,
+                      onChanged: (v) => setDialogState(() => isPrivate = v)),
+                ),
+              ]),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Create'),
-              ),
-            ],
           ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text('Create')),
+          ],
+        ),
+      ),
+    );
+    final groupName = name.text;
+    final groupDescription = description.text;
+    final groupMembers = members.text;
+    name.dispose();
+    description.dispose();
+    members.dispose();
+    if (created != true || !context.mounted) return;
+    final result = await context.read<AppState>().createGroup(
+          groupName,
+          memberUsernames: AppState.parseUsernameList(groupMembers),
+          description: groupDescription,
+          isPrivate: isPrivate,
+          isChannel: isChannel,
+          avatarId: avatarId,
         );
-      },
-    );
-    final name = nameCtrl.text;
-    final description = descriptionCtrl.text;
-    final members = membersCtrl.text;
-    nameCtrl.dispose();
-    descriptionCtrl.dispose();
-    membersCtrl.dispose();
-    if (ok != true || !context.mounted) return;
-
-    final state = context.read<AppState>();
-    final result = await state.createGroup(
-      name,
-      memberUsernames: AppState.parseUsernameList(members),
-      description: description,
-      isPrivate: isPrivate,
-      isChannel: isChannel,
-    );
     if (!context.mounted) return;
-    if (!result.ok) {
-      showMessengerSnackBar(
-          context, result.message ?? 'Could not create group');
-    } else if (result.message != null) {
-      showMessengerSnackBar(context, result.message!);
-    } else {
-      showMessengerSnackBar(context, 'Group created');
-    }
+    showMessengerSnackBar(
+        context,
+        result.ok
+            ? result.message ?? 'Group created'
+            : result.message ?? 'Could not create group');
   }
 }

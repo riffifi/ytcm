@@ -11,7 +11,8 @@ import '../services/app_state.dart';
 import '../screens/chat_screen.dart';
 
 /// Layout breakpoint for master–detail (desktop / tablet landscape).
-const wideLayoutBreakpoint = 900.0;
+const wideLayoutBreakpoint = 700.0;
+const comfortableWideLayoutBreakpoint = 980.0;
 
 bool get isDesktopPlatform {
   if (kIsWeb) return false;
@@ -20,6 +21,12 @@ bool get isDesktopPlatform {
 
 bool isWideLayout(BuildContext context) {
   return MediaQuery.sizeOf(context).width >= wideLayoutBreakpoint;
+}
+
+bool isCompactWideLayout(BuildContext context) {
+  final width = MediaQuery.sizeOf(context).width;
+  return width >= wideLayoutBreakpoint &&
+      width < comfortableWideLayoutBreakpoint;
 }
 
 bool useDesktopChrome(BuildContext context) =>

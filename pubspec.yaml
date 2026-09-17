@@ -42,6 +42,7 @@ flutter:
   assets:
     - assets/icon/app_icon.png
     - SVGs/regular/
+    - SVGs/fill/
 
   fonts:
     - family: Geist

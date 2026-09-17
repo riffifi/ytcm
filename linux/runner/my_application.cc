@@ -71,10 +71,16 @@ static void my_application_activate(GApplication* application) {
   }
 
   gtk_window_set_default_size(window, 1280, 720);
+  gtk_window_set_icon_name(window, APPLICATION_ID);
 
   g_autofree gchar* icon_path = resolve_app_icon_path();
   if (icon_path != nullptr) {
-    gtk_window_set_icon_from_file(GTK_WINDOW(window), icon_path, nullptr);
+    g_autoptr(GError) icon_error = nullptr;
+    if (!gtk_window_set_icon_from_file(GTK_WINDOW(window), icon_path,
+                                       &icon_error)) {
+      g_warning("Failed to set YeChat window icon: %s", icon_error->message);
+    }
+    gtk_window_set_default_icon_from_file(icon_path, nullptr);
   }
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
@@ -160,6 +166,7 @@ MyApplication* my_application_new() {
   // corresponding .desktop file. This ensures better integration by allowing
   // the application to be recognized beyond its binary name.
   g_set_prgname(APPLICATION_ID);
+  g_set_application_name("YeChat");
 
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",

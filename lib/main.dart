@@ -60,8 +60,8 @@ class App extends StatelessWidget {
             theme: AppTheme.light(lightPalette),
             darkTheme: AppTheme.dark(darkPalette),
             themeMode: appearance.mode,
-            themeAnimationDuration: const Duration(milliseconds: 260),
-            themeAnimationCurve: Curves.easeOutCubic,
+            themeAnimationDuration: AppMotion.theme,
+            themeAnimationCurve: AppMotion.standard,
             builder: (context, child) {
               final theme = Theme.of(context);
               return DefaultTextStyle(

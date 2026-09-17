@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../models/group_models.dart';
@@ -13,10 +12,13 @@ import '../widgets/phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 import '../utils/messenger_snackbar.dart';
 import '../widgets/chat_composer.dart';
-import '../widgets/file_attachment.dart';
-import '../widgets/message_body.dart';
 import '../widgets/connection_banner.dart';
 import '../widgets/upload_progress_banner.dart';
+import '../widgets/user_avatar.dart';
+import '../widgets/chat_message_tile.dart';
+import '../widgets/message_action_sheet.dart';
+import '../widgets/app_components.dart';
+import 'group_details_screen.dart';
 
 class _GroupListSnapshot {
   final List<GroupMessage> messages;
@@ -102,7 +104,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         final c = ctx.mc;
         return AlertDialog(
           backgroundColor: c.surface,
-          title: Text('Add member', style: TextStyle(color: c.primary)),
+          title: Text('Add member', style: AppTheme.appBarTitle(c)),
           content: TextField(
             controller: usernameCtrl,
             autofocus: true,
@@ -154,43 +156,21 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
   Future<void> _showMessageActions(GroupMessage message, bool isMe) async {
     messengerHapticSelection();
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (message.text?.trim().isNotEmpty == true)
-              ListTile(
-                leading: const Icon(Icons.copy_outlined),
-                title: const Text('Copy text'),
-                onTap: () => Navigator.pop(sheetContext, 'copy'),
-              ),
-            if (!message.uuid.startsWith('local-'))
-              ListTile(
-                leading: const Icon(Icons.delete_outline),
-                title: const Text('Delete for me'),
-                onTap: () => Navigator.pop(sheetContext, 'delete_me'),
-              ),
-            if (isMe && !message.uuid.startsWith('local-'))
-              ListTile(
-                leading: const Icon(Icons.delete_forever_outlined),
-                title: const Text('Delete for everyone'),
-                onTap: () => Navigator.pop(sheetContext, 'delete_everyone'),
-              ),
-          ],
-        ),
-      ),
+    final action = await showMessageActionSheet(
+      context,
+      canCopy: message.text?.trim().isNotEmpty == true,
+      canDeleteForMe: !message.uuid.startsWith('local-'),
+      canDeleteForEveryone: isMe && !message.uuid.startsWith('local-'),
     );
     if (!mounted || action == null) return;
-    if (action == 'copy') {
+    if (action == MessageAction.copy) {
       await Clipboard.setData(ClipboardData(text: message.text!.trim()));
       if (mounted) showMessengerSnackBar(context, 'Message copied');
       return;
     }
     context.read<AppState>().deleteGroupMessage(
           message,
-          forEveryone: action == 'delete_everyone',
+          forEveryone: action == MessageAction.deleteForEveryone,
         );
   }
 
@@ -198,11 +178,62 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   Widget build(BuildContext context) {
     final c = context.mc;
     final name = context.select<AppState, String?>((s) => s.activeGroupName);
+    final group = context.select<AppState, ChatGroup?>((s) {
+      final id = s.activeGroupId;
+      for (final item in s.groups) {
+        if (item.uuid == id) return item;
+      }
+      return null;
+    });
 
     return Scaffold(
       backgroundColor: c.bg,
       appBar: AppBar(
-        title: Text(name ?? 'Group'),
+        toolbarHeight: 68,
+        titleSpacing: 4,
+        title: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const GroupDetailsScreen()),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                UserAvatar(
+                  avatarFileId: group?.avatarId,
+                  initials: name ?? 'G',
+                  radius: 19,
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name ?? 'Group',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.appBarTitle(c),
+                      ),
+                      Text(
+                        group?.isChannel == true ? 'Channel' : 'Group',
+                        style: AppTheme.text(
+                          c,
+                          color: c.secondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         leading: IconButton(
           icon: PhosphorIcon(
             adaptiveBackIcon(context),
@@ -282,16 +313,13 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
               builder: (context, snap, _) {
                 _scheduleScroll(snap);
                 if (snap.messages.isEmpty) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Text(
-                        'No messages yet — say hello',
-                        textAlign: TextAlign.center,
-                        style:
-                            AppTheme.text(c, color: c.secondary, fontSize: 14),
-                      ),
-                    ),
+                  return EmptyState(
+                    icon: group?.isChannel == true
+                        ? PhosphorAssets.megaphone
+                        : PhosphorAssets.groups,
+                    title: 'Start the conversation',
+                    message:
+                        'Messages shared here reach everyone in the ${group?.isChannel == true ? 'channel' : 'group'}.',
                   );
                 }
 
@@ -303,18 +331,46 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   addAutomaticKeepAlives: false,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 20),
                   itemCount: snap.messages.length,
                   itemBuilder: (context, i) {
                     final msg = snap.messages[i];
                     final isMe = msg.senderId == meId;
-                    return _GroupBubble(
+                    final showDate = i == 0 ||
+                        !sameChatDay(
+                          snap.messages[i - 1].createdAt,
+                          msg.createdAt,
+                        );
+                    final startsSequence = i == 0 ||
+                        !messagesFormSequence(
+                          firstSenderId: snap.messages[i - 1].senderId,
+                          firstCreatedAt: snap.messages[i - 1].createdAt,
+                          secondSenderId: msg.senderId,
+                          secondCreatedAt: msg.createdAt,
+                        );
+                    final endsSequence = i == snap.messages.length - 1 ||
+                        !messagesFormSequence(
+                          firstSenderId: msg.senderId,
+                          firstCreatedAt: msg.createdAt,
+                          secondSenderId: snap.messages[i + 1].senderId,
+                          secondCreatedAt: snap.messages[i + 1].createdAt,
+                        );
+                    return GroupChatMessageTile(
                       key: ValueKey(msg.uuid),
                       message: msg,
                       isMe: isMe,
+                      showDate: showDate,
+                      startsSequence: startsSequence,
+                      endsSequence: endsSequence,
+                      animate: msg.uuid.startsWith('local-') ||
+                          (i >= snap.messages.length - 4 &&
+                              DateTime.now()
+                                      .difference(msg.createdAt)
+                                      .inSeconds <
+                                  3),
                       colors: c,
                       maxBubbleWidth: maxW,
-                      senderName: isMe
+                      senderLabel: isMe
                           ? null
                           : context
                               .read<AppState>()
@@ -328,103 +384,6 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           ),
           ChatComposer(onSend: _send, onAttach: _attachFile),
         ],
-      ),
-    );
-  }
-}
-
-class _GroupBubble extends StatelessWidget {
-  final GroupMessage message;
-  final bool isMe;
-  final AppColors colors;
-  final double maxBubbleWidth;
-  final String? senderName;
-  final VoidCallback? onLongPress;
-
-  const _GroupBubble({
-    super.key,
-    required this.message,
-    required this.isMe,
-    required this.colors,
-    required this.maxBubbleWidth,
-    this.senderName,
-    this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 6),
-        child: Align(
-          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
-            child: GestureDetector(
-              onLongPress: onLongPress,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  color: isMe ? colors.bubbleOut : colors.bubbleIn,
-                  borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(18),
-                    topRight: const Radius.circular(18),
-                    bottomLeft: Radius.circular(isMe ? 18 : 6),
-                    bottomRight: Radius.circular(isMe ? 6 : 18),
-                  ),
-                  border: Border.all(
-                    color:
-                        isMe ? colors.bubbleOutBorder : colors.bubbleInBorder,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment:
-                      isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!isMe)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          senderName ??
-                              (message.senderId.length > 8
-                                  ? message.senderId.substring(0, 8)
-                                  : message.senderId),
-                          style: TextStyle(
-                            color: colors.accent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    if (message.fileId != null && message.fileId!.isNotEmpty)
-                      FileAttachment(
-                        key: ValueKey('file-${message.fileId}'),
-                        fileId: message.fileId!,
-                        isMe: isMe,
-                      ),
-                    if (message.text != null && message.text!.trim().isNotEmpty)
-                      MessageBody(
-                        text: message.text,
-                        colors: colors,
-                        textStyle: TextStyle(
-                          color: colors.primary,
-                          fontSize: 15,
-                          height: 1.4,
-                        ),
-                      ),
-                    const SizedBox(height: 4),
-                    Text(
-                      DateFormat('HH:mm').format(message.createdAt),
-                      style: TextStyle(color: colors.tertiary, fontSize: 10),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
     );
   }

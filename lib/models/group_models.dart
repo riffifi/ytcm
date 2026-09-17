@@ -30,6 +30,45 @@ class ChatGroup {
       );
 }
 
+class GroupMember {
+  final String groupId;
+  final String userId;
+  final String role;
+  final DateTime joinedAt;
+
+  const GroupMember({
+    required this.groupId,
+    required this.userId,
+    required this.role,
+    required this.joinedAt,
+  });
+
+  factory GroupMember.fromJson(Map<String, dynamic> json) => GroupMember(
+        groupId: json['group_id'] as String,
+        userId: json['user_id'] as String,
+        role: json['role'] as String? ?? 'member',
+        joinedAt: parseServerTimestamp(json['joined_at']),
+      );
+
+  bool get isOwner => role == 'owner';
+  bool get isAdmin => role == 'owner' || role == 'admin';
+}
+
+class GroupDetails {
+  final ChatGroup group;
+  final List<GroupMember> members;
+
+  const GroupDetails({required this.group, required this.members});
+
+  factory GroupDetails.fromJson(Map<String, dynamic> json) => GroupDetails(
+        group: ChatGroup.fromJson(json['group'] as Map<String, dynamic>),
+        members: (json['members'] as List? ?? const [])
+            .map((member) =>
+                GroupMember.fromJson(member as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
 class GroupMessage {
   final String uuid;
   final String groupId;
@@ -37,6 +76,8 @@ class GroupMessage {
   final String? text;
   final String? fileId;
   final DateTime createdAt;
+  final List<String> deliveredTo;
+  final List<String> readBy;
   final bool deletedForEveryone;
   final String status;
 
@@ -47,6 +88,8 @@ class GroupMessage {
     this.text,
     this.fileId,
     required this.createdAt,
+    this.deliveredTo = const [],
+    this.readBy = const [],
     required this.deletedForEveryone,
     required this.status,
   });
@@ -65,6 +108,12 @@ class GroupMessage {
         text: json['text'] as String?,
         fileId: json['file_id'] as String?,
         createdAt: parseServerTimestamp(json['created_at']),
+        deliveredTo: (json['who_delivered'] as List? ?? const [])
+            .map((id) => id.toString())
+            .toList(),
+        readBy: (json['who_read'] as List? ?? const [])
+            .map((id) => id.toString())
+            .toList(),
         deletedForEveryone: json['deleted_for_everyone'] as bool? ?? false,
         status: json['status'] as String? ?? 'sent',
       );

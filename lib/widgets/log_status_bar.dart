@@ -84,7 +84,7 @@ class _LogStatusBarState extends State<LogStatusBar> {
       return Container(
         decoration: BoxDecoration(
           color: c.surface,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(color: c.border),
         ),
         clipBehavior: Clip.antiAlias,
@@ -127,12 +127,12 @@ class _LogStatusBarState extends State<LogStatusBar> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: c.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: c.border),
       ),
       child: Text(
         'No log entries yet',
-        style: TextStyle(color: c.tertiary, fontSize: 13),
+        style: AppTheme.caption(c, color: c.tertiary),
       ),
     );
   }
@@ -191,11 +191,8 @@ class _LogHeader extends StatelessWidget {
                     banner ?? 'Activity log — tap to expand',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: level == LogLevel.error ? c.error : c.secondary,
-                      fontSize: 11,
-                      height: 1.2,
-                    ),
+                    style: AppTheme.timestamp(c,
+                        color: level == LogLevel.error ? c.error : c.secondary),
                   ),
                 ),
                 if (hasErrors)
@@ -260,12 +257,7 @@ class _LogPanel extends StatelessWidget {
               children: [
                 Text(
                   'LOG (${entries.length})',
-                  style: TextStyle(
-                    color: c.tertiary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
-                  ),
+                  style: AppTheme.sectionLabel(c),
                 ),
                 const Spacer(),
                 TextButton(
@@ -285,7 +277,7 @@ class _LogPanel extends StatelessWidget {
                   ),
                   child: Text(
                     'Copy',
-                    style: TextStyle(fontSize: 11, color: c.accent),
+                    style: AppTheme.timestamp(c, color: c.accent),
                   ),
                 ),
                 TextButton(
@@ -301,7 +293,7 @@ class _LogPanel extends StatelessWidget {
                   ),
                   child: Text(
                     'Clear',
-                    style: TextStyle(fontSize: 11, color: c.secondary),
+                    style: AppTheme.timestamp(c, color: c.secondary),
                   ),
                 ),
               ],
@@ -312,7 +304,7 @@ class _LogPanel extends StatelessWidget {
                 ? Center(
                     child: Text(
                       'No log entries yet',
-                      style: TextStyle(color: c.tertiary, fontSize: 12),
+                      style: AppTheme.caption(c, color: c.tertiary),
                     ),
                   )
                 : ListView.builder(
@@ -346,23 +338,19 @@ class _LogLine extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: RichText(
         text: TextSpan(
-          style: TextStyle(fontSize: 11, height: 1.4, color: c.primary),
+          style: AppTheme.timestamp(c, color: c.primary).copyWith(height: 1.4),
           children: [
             TextSpan(
               text: '${entry.timeLabel} ',
-              style: TextStyle(color: c.tertiary),
+              style: AppTheme.timestamp(c),
             ),
             TextSpan(
               text: '${entry.level.label} ',
-              style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w600,
-                fontSize: 10,
-              ),
+              style: AppTheme.timestamp(c, color: color),
             ),
             TextSpan(
               text: '[${entry.category}] ',
-              style: TextStyle(color: c.tertiary, fontSize: 10),
+              style: AppTheme.timestamp(c),
             ),
             TextSpan(text: entry.message),
           ],

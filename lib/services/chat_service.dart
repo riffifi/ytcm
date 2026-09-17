@@ -56,12 +56,14 @@ class ChatService {
       StreamController<Map<String, List<GroupMessage>>>.broadcast();
   final _groupCreatedController = StreamController<ChatGroup>.broadcast();
   final _groupUpdatedController = StreamController<ChatGroup>.broadcast();
+  final _groupInfoController = StreamController<GroupDetails>.broadcast();
   final _groupDeletedController = StreamController<String>.broadcast();
   final _messageDeletedController =
       StreamController<MessageDeletedEvent>.broadcast();
   final _groupMessageDeletedController =
       StreamController<GroupMessageDeletedEvent>.broadcast();
   final _groupMembershipChangedController = StreamController<void>.broadcast();
+  final _groupReadChangedController = StreamController<String>.broadcast();
 
   Stream<Message> get messages => _messageController.stream;
   Stream<Map<String, List<Message>>> get historyEvents =>
@@ -79,6 +81,7 @@ class ChatService {
       _groupHistoryController.stream;
   Stream<ChatGroup> get groupCreated => _groupCreatedController.stream;
   Stream<ChatGroup> get groupUpdated => _groupUpdatedController.stream;
+  Stream<GroupDetails> get groupInfo => _groupInfoController.stream;
   Stream<String> get groupDeleted => _groupDeletedController.stream;
   Stream<MessageDeletedEvent> get messageDeleted =>
       _messageDeletedController.stream;
@@ -86,6 +89,7 @@ class ChatService {
       _groupMessageDeletedController.stream;
   Stream<void> get groupMembershipChanged =>
       _groupMembershipChangedController.stream;
+  Stream<String> get groupReadChanged => _groupReadChangedController.stream;
 
   bool get isConnected => _channel != null && _joined;
 
@@ -244,6 +248,11 @@ class ChatService {
             ChatGroup.fromJson(json['group'] as Map<String, dynamic>),
           );
           break;
+        case 'group_info':
+          _groupInfoController.add(
+            GroupDetails.fromJson(json['details'] as Map<String, dynamic>),
+          );
+          break;
         case 'group_deleted':
           _groupDeletedController.add(json['group_id'] as String);
           break;
@@ -272,6 +281,11 @@ class ChatService {
             byUserId: json['by_user_id'] as String,
             forEveryone: json['for_everyone'] as bool? ?? false,
           ));
+          break;
+        case 'group_mark_read_result':
+        case 'group_read_receipt':
+          final groupId = json['group_id'] as String?;
+          if (groupId != null) _groupReadChangedController.add(groupId);
           break;
         case 'pong':
           log?.debug('Pong', category: 'chat', banner: false);
@@ -366,16 +380,71 @@ class ChatService {
     List<String> memberIds = const [],
     bool isPrivate = false,
     bool isChannel = false,
+    String? avatarId,
   }) {
     _send({
       'action': 'create_group',
       'session_token': _token,
       'name': name,
       'description': description,
-      'avatar_id': null,
+      'avatar_id': avatarId,
       'is_private': isPrivate,
       'is_channel': isChannel,
       'member_ids': memberIds,
+    });
+  }
+
+  void requestGroupInfo(String groupId) {
+    _send({
+      'action': 'group_info',
+      'session_token': _token,
+      'group_id': groupId,
+    });
+  }
+
+  void updateGroup({
+    required String groupId,
+    String? name,
+    String? description,
+    String? avatarId,
+    bool? isPrivate,
+    bool? isChannel,
+  }) {
+    _send({
+      'action': 'update_group',
+      'session_token': _token,
+      'group_id': groupId,
+      'name': name,
+      'description': description,
+      'avatar_id': avatarId,
+      'is_private': isPrivate,
+      'is_channel': isChannel,
+    });
+  }
+
+  void setGroupMemberRole({
+    required String groupId,
+    required String userId,
+    required String role,
+  }) {
+    _send({
+      'action': 'set_group_member_role',
+      'session_token': _token,
+      'group_id': groupId,
+      'user_id': userId,
+      'role': role,
+    });
+  }
+
+  void removeGroupMember({
+    required String groupId,
+    required String userId,
+  }) {
+    _send({
+      'action': 'remove_group_member',
+      'session_token': _token,
+      'group_id': groupId,
+      'user_id': userId,
     });
   }
 
@@ -483,9 +552,11 @@ class ChatService {
     _groupHistoryController.close();
     _groupCreatedController.close();
     _groupUpdatedController.close();
+    _groupInfoController.close();
     _groupDeletedController.close();
     _messageDeletedController.close();
     _groupMessageDeletedController.close();
     _groupMembershipChangedController.close();
+    _groupReadChangedController.close();
   }
 }

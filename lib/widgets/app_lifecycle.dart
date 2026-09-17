@@ -9,6 +9,7 @@ import '../services/background_state.dart';
 import '../services/notification_preferences.dart';
 import '../services/notification_service.dart';
 import '../services/server_settings.dart';
+import '../theme.dart';
 
 /// Tracks foreground/background for notifications and the message listener service.
 class AppLifecycleBridge extends StatefulWidget {
@@ -68,7 +69,7 @@ class _AppLifecycleBridgeState extends State<AppLifecycleBridge>
       case AppLifecycleState.inactive:
         _backgroundDebounce?.cancel();
         _backgroundDebounce = Timer(
-          const Duration(milliseconds: 350),
+          AppMotion.theme,
           _goBackground,
         );
         break;

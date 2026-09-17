@@ -12,6 +12,7 @@ import 'phosphor_icon.dart';
 import '../utils/gif_message.dart';
 import '../utils/messenger_haptics.dart';
 import 'emoji_picker_sheet.dart';
+import 'app_bottom_sheet.dart';
 
 class ChatComposer extends StatefulWidget {
   final ValueChanged<String> onSend;
@@ -94,7 +95,7 @@ class _ChatComposerState extends State<ChatComposer> {
     }
 
     _gifDebounce?.cancel();
-    _gifDebounce = Timer(const Duration(milliseconds: 350), () {
+    _gifDebounce = Timer(AppMotion.theme, () {
       _fetchGifs(trigger.query);
     });
   }
@@ -200,10 +201,9 @@ class _ChatComposerState extends State<ChatComposer> {
 
   Future<void> _openGifPicker() async {
     messengerHapticSelection();
-    final picked = await showModalBottomSheet<GifResult>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+    final picked = await AppBottomSheet.show<GifResult>(
+      context,
+      title: 'GIF search',
       builder: (ctx) => _GifPickerSheet(
         search: (q) => _gifService().search(q),
       ),
@@ -317,7 +317,7 @@ class _ChatComposerState extends State<ChatComposer> {
                       _gifQuery.isEmpty
                           ? 'Type after @gif to search'
                           : 'No GIFs for “$_gifQuery”',
-                      style: TextStyle(color: c.secondary, fontSize: 12),
+                      style: AppTheme.caption(c),
                     ),
                   )
                 : ListView.separated(
@@ -334,7 +334,7 @@ class _ChatComposerState extends State<ChatComposer> {
                           _applyGifResult(gif);
                         },
                         child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                           child: Image.network(
                             gif.previewUrl,
                             width: 88,
@@ -371,13 +371,13 @@ class _ChatComposerState extends State<ChatComposer> {
             maxLines: 6,
             minLines: 1,
             textCapitalization: TextCapitalization.sentences,
-            style: TextStyle(color: c.primary, fontSize: 15, height: 1.35),
+            style: AppTheme.text(c, fontSize: 15, height: 1.35),
             cursorColor: c.accent,
             decoration: InputDecoration(
               hintText: MediaQuery.sizeOf(context).width < 600
                   ? 'Message'
                   : 'Message · Enter to send · Shift+Enter for new line',
-              hintStyle: TextStyle(color: c.tertiary, fontSize: 14),
+              hintStyle: AppTheme.text(c, color: c.tertiary, fontSize: 14),
               filled: false,
               isDense: true,
               border: InputBorder.none,
@@ -445,7 +445,7 @@ class _SendButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedScale(
       scale: hasText ? 1.0 : 0.92,
-      duration: const Duration(milliseconds: 150),
+      duration: AppMotion.base,
       curve: Curves.easeOut,
       child: Material(
         color: hasText ? colors.accent : colors.surfaceHigh,
@@ -482,7 +482,7 @@ class _GifPickerSheet extends StatefulWidget {
 }
 
 class _GifPickerSheetState extends State<_GifPickerSheet> {
-  final _queryCtrl = TextEditingController(text: 'hello');
+  final _queryCtrl = TextEditingController();
   Timer? _debounce;
   List<GifResult> _results = [];
   bool _loading = false;
@@ -503,7 +503,7 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
 
   void _onQueryChanged() {
     _debounce?.cancel();
-    _debounce = Timer(const Duration(milliseconds: 400), _runSearch);
+    _debounce = Timer(AppMotion.theme, _runSearch);
   }
 
   Future<void> _runSearch() async {
@@ -530,103 +530,110 @@ class _GifPickerSheetState extends State<_GifPickerSheet> {
     final c = context.mc;
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: bottom),
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.55,
-        minChildSize: 0.35,
-        maxChildSize: 0.92,
-        builder: (context, scrollCtrl) {
-          return Container(
-            decoration: BoxDecoration(
-              color: c.surface,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(16)),
-            ),
-            child: Column(
-              children: [
-                const SizedBox(height: 8),
-                Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: c.border,
-                    borderRadius: BorderRadius.circular(2),
+    return SizedBox(
+      height: (MediaQuery.sizeOf(context).height * .68).clamp(420, 680),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: bottom),
+        child: DraggableScrollableSheet(
+          initialChildSize: 1,
+          minChildSize: 1,
+          maxChildSize: 1,
+          builder: (context, scrollCtrl) {
+            return Container(
+              decoration: BoxDecoration(
+                color: c.surface,
+                borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(AppRadius.md)),
+              ),
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: c.border,
+                      borderRadius: BorderRadius.circular(AppRadius.xs),
+                    ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: TextField(
-                    controller: _queryCtrl,
-                    autofocus: true,
-                    style: TextStyle(color: c.primary),
-                    cursorColor: c.accent,
-                    decoration: InputDecoration(
-                      hintText: 'Search GIFs',
-                      prefixIcon: PhosphorIcon.forInput(
-                        PhosphorAssets.search,
-                        color: c.tertiary,
-                      ),
-                      filled: true,
-                      fillColor: c.surfaceHigh,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide.none,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    child: TextField(
+                      controller: _queryCtrl,
+                      autofocus: true,
+                      style: AppTheme.text(c),
+                      cursorColor: c.accent,
+                      decoration: InputDecoration(
+                        hintText: 'Search GIFs',
+                        prefixIcon: PhosphorIcon.forInput(
+                          PhosphorAssets.search,
+                          color: c.tertiary,
+                        ),
+                        filled: true,
+                        fillColor: c.surfaceHigh,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Expanded(
-                  child: _loading && _results.isEmpty
-                      ? Center(
-                          child: CircularProgressIndicator(color: c.accent),
-                        )
-                      : _results.isEmpty
-                          ? Center(
-                              child: Text(
-                                'No results',
-                                style: TextStyle(color: c.secondary),
-                              ),
-                            )
-                          : GridView.builder(
-                              controller: scrollCtrl,
-                              padding: const EdgeInsets.all(12),
-                              gridDelegate:
-                                  const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                mainAxisSpacing: 8,
-                                crossAxisSpacing: 8,
-                              ),
-                              itemCount: _results.length,
-                              itemBuilder: (context, i) {
-                                final gif = _results[i];
-                                return GestureDetector(
-                                  onTap: () {
-                                    messengerHapticSelection();
-                                    Navigator.pop(context, gif);
-                                  },
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(10),
-                                    child: Image.network(
-                                      gif.previewUrl,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => ColoredBox(
-                                        color: c.surfaceHigh,
-                                        child: PhosphorIcon(
-                                          PhosphorAssets.imageBroken,
-                                          color: c.tertiary,
+                  Expanded(
+                    child: _loading && _results.isEmpty
+                        ? Center(
+                            child: CircularProgressIndicator(color: c.accent),
+                          )
+                        : _results.isEmpty
+                            ? Center(
+                                child: Text(
+                                  _queryCtrl.text.trim().isEmpty
+                                      ? 'Search for a GIF'
+                                      : 'No results',
+                                  style: AppTheme.caption(c),
+                                ),
+                              )
+                            : GridView.builder(
+                                controller: scrollCtrl,
+                                padding: const EdgeInsets.all(12),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  mainAxisSpacing: 8,
+                                  crossAxisSpacing: 8,
+                                ),
+                                itemCount: _results.length,
+                                itemBuilder: (context, i) {
+                                  final gif = _results[i];
+                                  return GestureDetector(
+                                    onTap: () {
+                                      messengerHapticSelection();
+                                      Navigator.pop(context, gif);
+                                    },
+                                    child: ClipRRect(
+                                      borderRadius:
+                                          BorderRadius.circular(AppRadius.sm),
+                                      child: Image.network(
+                                        gif.previewUrl,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            ColoredBox(
+                                          color: c.surfaceHigh,
+                                          child: PhosphorIcon(
+                                            PhosphorAssets.imageBroken,
+                                            color: c.tertiary,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                  ),
-                                );
-                              },
-                            ),
-                ),
-              ],
-            ),
-          );
-        },
+                                  );
+                                },
+                              ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }

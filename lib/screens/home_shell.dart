@@ -6,6 +6,7 @@ import '../services/app_state.dart';
 import '../icons/phosphor_assets.dart';
 import '../theme.dart';
 import '../widgets/phosphor_icon.dart';
+import '../widgets/app_components.dart';
 import '../utils/messenger_haptics.dart';
 import '../utils/platform_ui.dart';
 import 'chat_screen.dart';
@@ -46,36 +47,67 @@ class _HomeShellState extends State<HomeShell> implements Intents {
     setState(() => _selectedPeerId = null);
   }
 
+  void _selectTab(int index) {
+    if (index == _mobileIndex) return;
+    messengerHapticSelection();
+    setState(() => _mobileIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (!isWideLayout(context)) {
       return Scaffold(
-        body: IndexedStack(
+        body: _TabTransition(
           index: _mobileIndex,
-          children: const [
-            ConversationsScreen(inShell: true),
-            GroupsScreen(embedded: true),
-            ProfileScreen(embedded: true),
-          ],
+          child: IndexedStack(
+            index: _mobileIndex,
+            children: const [
+              ConversationsScreen(inShell: true),
+              GroupsScreen(embedded: true),
+              ProfileScreen(embedded: true),
+              SettingsScreen(embedded: true),
+            ],
+          ),
         ),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _mobileIndex,
-          onDestinationSelected: (index) {
-            messengerHapticSelection();
-            setState(() => _mobileIndex = index);
-          },
+          onDestinationSelected: _selectTab,
           destinations: const [
             NavigationDestination(
               icon: PhosphorIcon(PhosphorAssets.chat, size: 22),
+              selectedIcon: PhosphorIcon(
+                PhosphorAssets.chat,
+                size: 22,
+                weight: PhosphorWeight.fill,
+              ),
               label: 'Chats',
             ),
             NavigationDestination(
               icon: PhosphorIcon(PhosphorAssets.groups, size: 22),
+              selectedIcon: PhosphorIcon(
+                PhosphorAssets.groups,
+                size: 22,
+                weight: PhosphorWeight.fill,
+              ),
               label: 'Groups',
             ),
             NavigationDestination(
               icon: PhosphorIcon(PhosphorAssets.user, size: 22),
+              selectedIcon: PhosphorIcon(
+                PhosphorAssets.user,
+                size: 22,
+                weight: PhosphorWeight.fill,
+              ),
               label: 'You',
+            ),
+            NavigationDestination(
+              icon: PhosphorIcon(PhosphorAssets.settings, size: 22),
+              selectedIcon: PhosphorIcon(
+                PhosphorAssets.settings,
+                size: 22,
+                weight: PhosphorWeight.fill,
+              ),
+              label: 'Settings',
             ),
           ],
         ),
@@ -83,6 +115,7 @@ class _HomeShellState extends State<HomeShell> implements Intents {
     }
 
     final c = context.mc;
+    final compactWide = isCompactWideLayout(context);
     final activeId = context.select<AppState, String?>(
       (s) => s.activeChatUserId,
     );
@@ -134,18 +167,17 @@ class _HomeShellState extends State<HomeShell> implements Intents {
               children: [
                 NavigationRail(
                   selectedIndex: _mobileIndex,
-                  onDestinationSelected: (index) {
-                    messengerHapticSelection();
-                    setState(() => _mobileIndex = index);
-                  },
+                  onDestinationSelected: _selectTab,
                   backgroundColor: c.surface,
                   indicatorColor: c.accentSoft,
-                  labelType: NavigationRailLabelType.all,
-                  minWidth: 82,
+                  labelType: compactWide
+                      ? NavigationRailLabelType.selected
+                      : NavigationRailLabelType.all,
+                  minWidth: compactWide ? 68 : 82,
                   leading: Padding(
                     padding: const EdgeInsets.only(bottom: 18),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                       child: Image.asset(
                         'assets/icon/app_icon.png',
                         width: 46,
@@ -154,62 +186,169 @@ class _HomeShellState extends State<HomeShell> implements Intents {
                       ),
                     ),
                   ),
-                  destinations: const [
+                  destinations: [
                     NavigationRailDestination(
-                      icon: PhosphorIcon(PhosphorAssets.chat, size: 22),
-                      label: Text('Chats'),
+                      icon: PhosphorIcon(
+                        PhosphorAssets.chat,
+                        size: 22,
+                        color: c.tertiary,
+                      ),
+                      selectedIcon: PhosphorIcon(
+                        PhosphorAssets.chat,
+                        size: 22,
+                        color: c.accent,
+                        weight: PhosphorWeight.fill,
+                      ),
+                      label: const Text('Chats'),
                     ),
                     NavigationRailDestination(
-                      icon: PhosphorIcon(PhosphorAssets.groups, size: 22),
-                      label: Text('Groups'),
+                      icon: PhosphorIcon(
+                        PhosphorAssets.groups,
+                        size: 22,
+                        color: c.tertiary,
+                      ),
+                      selectedIcon: PhosphorIcon(
+                        PhosphorAssets.groups,
+                        size: 22,
+                        color: c.accent,
+                        weight: PhosphorWeight.fill,
+                      ),
+                      label: const Text('Groups'),
                     ),
                     NavigationRailDestination(
-                      icon: PhosphorIcon(PhosphorAssets.user, size: 22),
-                      label: Text('You'),
+                      icon: PhosphorIcon(
+                        PhosphorAssets.user,
+                        size: 22,
+                        color: c.tertiary,
+                      ),
+                      selectedIcon: PhosphorIcon(
+                        PhosphorAssets.user,
+                        size: 22,
+                        color: c.accent,
+                        weight: PhosphorWeight.fill,
+                      ),
+                      label: const Text('You'),
+                    ),
+                    NavigationRailDestination(
+                      icon: PhosphorIcon(
+                        PhosphorAssets.settings,
+                        size: 22,
+                        color: c.tertiary,
+                      ),
+                      selectedIcon: PhosphorIcon(
+                        PhosphorAssets.settings,
+                        size: 22,
+                        color: c.accent,
+                        weight: PhosphorWeight.fill,
+                      ),
+                      label: const Text('Settings'),
                     ),
                   ],
                 ),
                 Container(width: 1, color: c.borderSoft),
                 Expanded(
-                  child: IndexedStack(
+                  child: _TabTransition(
                     index: _mobileIndex,
-                    children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 370,
-                            child: ConversationsScreen(
-                              selectionMode: true,
-                              inShell: true,
-                              selectedPeerId: activeId ?? _selectedPeerId,
-                              onPeerSelected: _selectPeer,
+                    child: IndexedStack(
+                      index: _mobileIndex,
+                      children: [
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: compactWide ? 300 : 370,
+                              child: ConversationsScreen(
+                                selectionMode: true,
+                                inShell: true,
+                                selectedPeerId: activeId ?? _selectedPeerId,
+                                onPeerSelected: _selectPeer,
+                              ),
                             ),
-                          ),
-                          Container(width: 1, color: c.borderSoft),
-                          Expanded(
-                            child: showChat
-                                ? ChatScreen(
-                                    embedded: true,
-                                    onClose: _clearSelection,
-                                  )
-                                : _DesktopEmptyPane(
-                                    onNewChat: () =>
-                                        ConversationsScreen.showNewChatModal(
-                                      context,
-                                      onPeerSelected: _selectPeer,
+                            Container(width: 1, color: c.borderSoft),
+                            Expanded(
+                              child: showChat
+                                  ? ChatScreen(
+                                      embedded: true,
+                                      onClose: _clearSelection,
+                                    )
+                                  : _DesktopEmptyPane(
+                                      onNewChat: () =>
+                                          ConversationsScreen.showNewChatModal(
+                                        context,
+                                        onPeerSelected: _selectPeer,
+                                      ),
                                     ),
-                                  ),
-                          ),
-                        ],
-                      ),
-                      const GroupsScreen(embedded: true),
-                      const ProfileScreen(embedded: true),
-                    ],
+                            ),
+                          ],
+                        ),
+                        const GroupsScreen(embedded: true),
+                        const ProfileScreen(embedded: true),
+                        const SettingsScreen(embedded: true),
+                      ],
+                    ),
                   ),
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TabTransition extends StatefulWidget {
+  const _TabTransition({required this.index, required this.child});
+
+  final int index;
+  final Widget child;
+
+  @override
+  State<_TabTransition> createState() => _TabTransitionState();
+}
+
+class _TabTransitionState extends State<_TabTransition>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  int _direction = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: AppMotion.base,
+      value: 1,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _TabTransition oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index == widget.index) return;
+    _direction = widget.index > oldWidget.index ? 1 : -1;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final animation = CurvedAnimation(
+      parent: _controller,
+      curve: AppMotion.standard,
+    );
+    return AnimatedBuilder(
+      animation: animation,
+      child: widget.child,
+      builder: (context, child) => Opacity(
+        opacity: .78 + animation.value * .22,
+        child: Transform.translate(
+          offset: Offset(_direction * 10 * (1 - animation.value), 0),
+          child: child,
         ),
       ),
     );
@@ -223,65 +362,19 @@ class _DesktopEmptyPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.mc;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 108,
-              height: 108,
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: c.surface,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: c.borderSoft),
-                boxShadow: [
-                  BoxShadow(
-                    color: c.accent.withValues(alpha: 0.16),
-                    blurRadius: 36,
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child: Image.asset(
-                  'assets/icon/app_icon.png',
-                  fit: BoxFit.cover,
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Your conversations live here',
-              style: AppTheme.heading(c, fontSize: 24),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Choose a chat from the sidebar or start a new one.\n${desktopShortcutHint(context)}',
-              textAlign: TextAlign.center,
-              style: AppTheme.text(
-                c,
-                color: c.secondary,
-                fontSize: 13,
-                wght: 450,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 20),
-            FilledButton.icon(
-              onPressed: onNewChat,
-              icon: const PhosphorIcon(
-                PhosphorAssets.edit,
-                color: Colors.white,
-                size: 18,
-              ),
-              label: const Text('New chat'),
-            ),
-          ],
+    return EmptyState(
+      icon: PhosphorAssets.chat,
+      title: 'Your conversations live here',
+      message:
+          'Choose a chat from the sidebar or start a new one.\n${desktopShortcutHint(context)}',
+      action: FilledButton.icon(
+        onPressed: onNewChat,
+        icon: const PhosphorIcon(
+          PhosphorAssets.edit,
+          color: Colors.white,
+          size: 18,
         ),
+        label: const Text('New chat'),
       ),
     );
   }

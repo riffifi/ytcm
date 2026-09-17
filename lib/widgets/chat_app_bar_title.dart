@@ -87,7 +87,7 @@ class ChatAppBarTitle extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.xs),
       child: row,
     );
   }

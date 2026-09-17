@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'dart:typed_data';
 
 import '../services/app_state.dart';
 import '../theme.dart';
@@ -11,6 +12,7 @@ class UserAvatar extends StatefulWidget {
   final String initials;
   final double radius;
   final Color? backgroundColor;
+  final ValueChanged<Uint8List>? onImageLoaded;
 
   const UserAvatar({
     super.key,
@@ -18,6 +20,7 @@ class UserAvatar extends StatefulWidget {
     required this.initials,
     this.radius = 20,
     this.backgroundColor,
+    this.onImageLoaded,
   });
 
   @override
@@ -58,6 +61,15 @@ class _UserAvatarState extends State<UserAvatar> {
 
     final cached = await state.cachedFilePath(fileId, meta.filename);
     if (cached != null && mounted) {
+      if (widget.onImageLoaded != null) {
+        try {
+          final bytes = await File(cached).readAsBytes();
+          if (mounted) widget.onImageLoaded!(bytes);
+        } catch (_) {
+          // Color extraction is optional; avatar rendering can continue.
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _localPath = cached;
         _loading = false;
@@ -70,6 +82,7 @@ class _UserAvatarState extends State<UserAvatar> {
     try {
       final downloaded = await state.downloadFile(fileId);
       if (!mounted) return;
+      widget.onImageLoaded?.call(Uint8List.fromList(downloaded.bytes));
       setState(() {
         _localPath = downloaded.localPath;
         _loading = false;
@@ -101,9 +114,15 @@ class _UserAvatarState extends State<UserAvatar> {
       );
     }
 
-    final label = widget.initials.isNotEmpty
-        ? widget.initials.substring(0, 1).toUpperCase()
-        : '?';
+    final normalized = widget.initials.trim();
+    final words = normalized.split(RegExp(r'\s+')).where((s) => s.isNotEmpty);
+    final label = words.isEmpty
+        ? '?'
+        : words.length > 1
+            ? '${words.first[0]}${words.elementAt(1)[0]}'.toUpperCase()
+            : normalized
+                .substring(0, normalized.length.clamp(1, 2))
+                .toUpperCase();
 
     return CircleAvatar(
       radius: widget.radius,
@@ -119,11 +138,10 @@ class _UserAvatarState extends State<UserAvatar> {
             )
           : Text(
               label,
-              style: TextStyle(
-                color: c.accent,
-                fontSize: widget.radius * 0.72,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTheme.text(c,
+                  color: c.accent,
+                  fontSize: widget.radius * 0.72,
+                  wght: AppFontWeight.semibold),
             ),
     );
   }

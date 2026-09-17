@@ -131,7 +131,7 @@ class _FileAttachmentState extends State<FileAttachment> {
       decoration: BoxDecoration(
         color:
             widget.isMe ? Colors.white.withValues(alpha: 0.08) : c.surfaceHigh,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(
           color: widget.isMe ? c.bubbleOutBorder : c.borderSoft,
         ),
@@ -153,11 +153,9 @@ class _FileAttachmentState extends State<FileAttachment> {
                   filename,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: widget.isMe ? Colors.white : c.primary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: AppTheme.listTitle(c).copyWith(
+                      color: widget.isMe ? Colors.white : c.primary,
+                      fontSize: 14),
                 ),
                 Text(
                   _loading
@@ -167,17 +165,15 @@ class _FileAttachmentState extends State<FileAttachment> {
                           : _cacheLookupDone
                               ? 'Tap to download'
                               : 'Loading…',
-                  style: TextStyle(
-                    color: widget.isMe ? Colors.white60 : c.secondary,
-                    fontSize: 11,
-                  ),
+                  style: AppTheme.timestamp(c,
+                      color: widget.isMe ? Colors.white60 : c.secondary),
                 ),
                 if (_error != null)
                   Text(
                     _error!,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: c.error, fontSize: 10),
+                    style: AppTheme.timestamp(c, color: c.error),
                   ),
               ],
             ),

@@ -46,6 +46,8 @@ class AppState extends ChangeNotifier {
   final Map<String, List<Message>> _conversations = {};
   final Map<String, List<GroupMessage>> _groupConversations = {};
   final List<ChatGroup> _groups = [];
+  final Map<String, GroupDetails> _groupDetails = {};
+  final Set<String> _avatarAccessGrants = {};
   List<Connection> _contacts = [];
   final Map<String, UserInfo> _peerProfiles = {};
   final Set<String> _onlinePeerIds = {};
@@ -67,10 +69,12 @@ class AppState extends ChangeNotifier {
   StreamSubscription<ChatGroup>? _groupCreatedSub;
   StreamSubscription<bool>? _connectionStateSub;
   StreamSubscription<ChatGroup>? _groupUpdatedSub;
+  StreamSubscription<GroupDetails>? _groupInfoSub;
   StreamSubscription<String>? _groupDeletedSub;
   StreamSubscription<MessageDeletedEvent>? _messageDeletedSub;
   StreamSubscription<GroupMessageDeletedEvent>? _groupMessageDeletedSub;
   StreamSubscription<void>? _groupMembershipChangedSub;
+  StreamSubscription<String>? _groupReadChangedSub;
 
   String? get token => _token;
   UserInfo? get me => _me;
@@ -86,6 +90,7 @@ class AppState extends ChangeNotifier {
   String? get activeGroupId => _activeGroupId;
   String? get activeGroupName => _activeGroupName;
   List<ChatGroup> get groups => List.unmodifiable(_groups);
+  GroupDetails? groupDetails(String groupId) => _groupDetails[groupId];
   bool get isLoggedIn => _token != null && _me != null;
 
   /// All chats: saved peers, message history, and known contacts.
@@ -177,6 +182,8 @@ class AppState extends ChangeNotifier {
     _contacts.clear();
     _groups.clear();
     _groupConversations.clear();
+    _groupDetails.clear();
+    _avatarAccessGrants.clear();
     _rebuildServices();
 
     if (_token == null) {
@@ -416,12 +423,20 @@ class AppState extends ChangeNotifier {
       }
     });
     _groupUpdatedSub = chat.groupUpdated.listen(_onGroupUpdated);
+    _groupInfoSub = chat.groupInfo.listen(_onGroupInfo);
     _groupDeletedSub = chat.groupDeleted.listen(_onGroupDeleted);
     _messageDeletedSub = chat.messageDeleted.listen(_onMessageDeleted);
     _groupMessageDeletedSub =
         chat.groupMessageDeleted.listen(_onGroupMessageDeleted);
     _groupMembershipChangedSub = chat.groupMembershipChanged.listen((_) {
-      if (chat.isConnected) chat.listGroups();
+      if (chat.isConnected) {
+        chat.listGroups();
+        final groupId = _activeGroupId;
+        if (groupId != null) chat.requestGroupInfo(groupId);
+      }
+    });
+    _groupReadChangedSub = chat.groupReadChanged.listen((groupId) {
+      if (chat.isConnected) chat.requestGroupHistory(groupId);
     });
 
     // Subscribe before join: broadcast streams do not replay a fast server
@@ -580,10 +595,12 @@ class AppState extends ChangeNotifier {
     await _groupCreatedSub?.cancel();
     await _connectionStateSub?.cancel();
     await _groupUpdatedSub?.cancel();
+    await _groupInfoSub?.cancel();
     await _groupDeletedSub?.cancel();
     await _messageDeletedSub?.cancel();
     await _groupMessageDeletedSub?.cancel();
     await _groupMembershipChangedSub?.cancel();
+    await _groupReadChangedSub?.cancel();
     _msgSub = null;
     _historySub = null;
     _connectionsSub = null;
@@ -597,10 +614,12 @@ class AppState extends ChangeNotifier {
     _groupCreatedSub = null;
     _connectionStateSub = null;
     _groupUpdatedSub = null;
+    _groupInfoSub = null;
     _groupDeletedSub = null;
     _messageDeletedSub = null;
     _groupMessageDeletedSub = null;
     _groupMembershipChangedSub = null;
+    _groupReadChangedSub = null;
   }
 
   void _onGroups(List<ChatGroup> groups) {
@@ -608,6 +627,8 @@ class AppState extends ChangeNotifier {
       ..clear()
       ..addAll(groups)
       ..sort((a, b) => a.name.compareTo(b.name));
+    final ids = groups.map((group) => group.uuid).toSet();
+    _groupDetails.removeWhere((groupId, _) => !ids.contains(groupId));
     notifyListeners();
   }
 
@@ -620,12 +641,27 @@ class AppState extends ChangeNotifier {
     }
     _groups.sort((a, b) => a.name.compareTo(b.name));
     if (_activeGroupId == group.uuid) _activeGroupName = group.name;
+    final details = _groupDetails[group.uuid];
+    if (details != null) {
+      _groupDetails[group.uuid] = GroupDetails(
+        group: group,
+        members: details.members,
+      );
+    }
+    notifyListeners();
+  }
+
+  void _onGroupInfo(GroupDetails details) {
+    _groupDetails[details.group.uuid] = details;
+    _onGroupUpdated(details.group);
+    unawaited(prefetchPeerProfiles(details.members.map((m) => m.userId)));
     notifyListeners();
   }
 
   void _onGroupDeleted(String groupId) {
     _groups.removeWhere((group) => group.uuid == groupId);
     _groupConversations.remove(groupId);
+    _groupDetails.remove(groupId);
     if (_activeGroupId == groupId) closeGroupChat();
     notifyListeners();
   }
@@ -694,6 +730,31 @@ class AppState extends ChangeNotifier {
   List<GroupMessage> getGroupMessages(String groupId) =>
       _groupConversations[groupId] ?? [];
 
+  GroupMessage? getLastGroupMessage(String groupId) {
+    final messages = _groupConversations[groupId];
+    return messages == null || messages.isEmpty ? null : messages.last;
+  }
+
+  int getGroupUnreadCount(String groupId) {
+    final meId = _me?.uuid;
+    if (meId == null || _activeGroupId == groupId) return 0;
+    return _groupConversations[groupId]
+            ?.where((message) =>
+                message.senderId != meId && !message.readBy.contains(meId))
+            .length ??
+        0;
+  }
+
+  Future<void> refreshGroups() async {
+    if (!chat.isConnected) return;
+    chat.listGroups();
+    for (final group in _groups) {
+      chat.requestGroupHistory(group.uuid);
+      chat.requestGroupInfo(group.uuid);
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+  }
+
   void openGroupChat(String groupId, String name) {
     _activeGroupId = groupId;
     _activeGroupName = name;
@@ -706,6 +767,7 @@ class AppState extends ChangeNotifier {
     ));
     _groupConversations.putIfAbsent(groupId, () => []);
     chat.requestGroupHistory(groupId);
+    chat.requestGroupInfo(groupId);
     chat.markGroupRead(groupId);
     notifyListeners();
   }
@@ -766,6 +828,27 @@ class AppState extends ChangeNotifier {
       return 'You are already in this group';
     }
 
+    await _shareMyAvatarWith([resolved.userId]);
+    final groupAvatar = _groups
+        .cast<ChatGroup?>()
+        .firstWhere(
+          (group) => group?.uuid == _activeGroupId,
+          orElse: () => null,
+        )
+        ?.avatarId;
+    if (groupAvatar != null) {
+      try {
+        await file.grantAccess(
+          sessionToken: _token!,
+          fileId: groupAvatar,
+          userId: resolved.userId,
+        );
+      } catch (e) {
+        log.debug('Group avatar grant skipped: $e',
+            category: 'file', banner: false);
+      }
+    }
+
     chat.addGroupMember(groupId: _activeGroupId!, userId: resolved.userId);
     _rememberPeer(resolved.userId, resolved.username);
     log.info('Added ${resolved.username} to group', category: 'group');
@@ -780,6 +863,7 @@ class AppState extends ChangeNotifier {
     String? description,
     bool isPrivate = false,
     bool isChannel = false,
+    String? avatarId,
   }) async {
     if (!chat.isConnected) {
       return (ok: false, message: 'Waiting for chat connection…');
@@ -807,12 +891,27 @@ class AppState extends ChangeNotifier {
     }
 
     final cleanDescription = description?.trim();
+    if (avatarId != null && _token != null) {
+      for (final memberId in memberIds) {
+        try {
+          await file.grantAccess(
+            sessionToken: _token!,
+            fileId: avatarId,
+            userId: memberId,
+          );
+        } catch (e) {
+          log.warn('Could not share group avatar with $memberId: $e',
+              category: 'file');
+        }
+      }
+    }
     chat.createGroup(
       name: trimmed,
       description: cleanDescription?.isEmpty == true ? null : cleanDescription,
       memberIds: memberIds,
       isPrivate: isPrivate,
       isChannel: isChannel,
+      avatarId: avatarId,
     );
     log.info('Creating group "$trimmed" (${memberIds.length} members)',
         category: 'group');
@@ -825,6 +924,59 @@ class AppState extends ChangeNotifier {
       );
     }
     return (ok: true, message: null);
+  }
+
+  Future<String?> updateActiveGroup({
+    required String name,
+    required String description,
+    required bool isPrivate,
+    required bool isChannel,
+    String? avatarId,
+  }) async {
+    final groupId = _activeGroupId;
+    if (groupId == null) return 'Open a group first';
+    if (!chat.isConnected) return 'Waiting for chat connection…';
+    final cleanName = name.trim();
+    if (cleanName.isEmpty) return 'Enter a group name';
+
+    if (avatarId != null && _token != null) {
+      final members = _groupDetails[groupId]?.members ?? const <GroupMember>[];
+      for (final member in members) {
+        if (member.userId == _me?.uuid) continue;
+        try {
+          await file.grantAccess(
+            sessionToken: _token!,
+            fileId: avatarId,
+            userId: member.userId,
+          );
+        } catch (e) {
+          log.warn('Could not share group avatar with ${member.userId}: $e',
+              category: 'file');
+        }
+      }
+    }
+
+    chat.updateGroup(
+      groupId: groupId,
+      name: cleanName,
+      description: description.trim(),
+      avatarId: avatarId,
+      isPrivate: isPrivate,
+      isChannel: isChannel,
+    );
+    return null;
+  }
+
+  void setGroupMemberRole(String userId, String role) {
+    final groupId = _activeGroupId;
+    if (groupId == null) return;
+    chat.setGroupMemberRole(groupId: groupId, userId: userId, role: role);
+  }
+
+  void removeGroupMember(String userId) {
+    final groupId = _activeGroupId;
+    if (groupId == null) return;
+    chat.removeGroupMember(groupId: groupId, userId: userId);
   }
 
   Future<({Uint8List bytes, String filename, String mimeType})?>
@@ -1071,7 +1223,34 @@ class AppState extends ChangeNotifier {
       }
     }
     _scheduleProfilePrefetch();
+    unawaited(_shareMyAvatarWith(conns.map((c) => c.uuid)));
     notifyListeners();
+  }
+
+  Future<void> _shareMyAvatarWith(
+    Iterable<String> userIds, {
+    String? avatarFileId,
+  }) async {
+    final token = _token;
+    final avatarId =
+        avatarFileId ?? ProfileExtras.parse(_me?.additionalInfo).avatarFileId;
+    if (token == null || avatarId == null) return;
+    for (final userId in userIds) {
+      if (userId == _me?.uuid) continue;
+      final key = '$avatarId:$userId';
+      if (!_avatarAccessGrants.add(key)) continue;
+      try {
+        await file.grantAccess(
+          sessionToken: token,
+          fileId: avatarId,
+          userId: userId,
+        );
+      } catch (e) {
+        _avatarAccessGrants.remove(key);
+        log.debug('Avatar access grant skipped for $userId: $e',
+            category: 'file', banner: false);
+      }
+    }
   }
 
   void _onReadReceipt(String userId) {
@@ -1355,6 +1534,7 @@ class AppState extends ChangeNotifier {
     _markIncomingRead(peerId);
     chat.markRead(peerId);
     unawaited(refreshPeerProfile(peerId));
+    unawaited(_shareMyAvatarWith([peerId]));
     notifyListeners();
   }
 
@@ -1727,6 +1907,7 @@ class AppState extends ChangeNotifier {
     final serialized = ProfileExtras(
       bio: bio ?? extras.bio,
       avatarFileId: avatarFileId ?? extras.avatarFileId,
+      extraFields: extras.extraFields,
     ).serialize();
     var extrasOk = true;
     if (serialized != (_me?.additionalInfo ?? '')) {
@@ -1738,7 +1919,7 @@ class AppState extends ChangeNotifier {
     return fnOk && lnOk && usernameOk && birthDateOk && extrasOk;
   }
 
-  Future<String?> uploadAvatarImage() async {
+  Future<String?> uploadAvatarImage({bool shareWithContacts = true}) async {
     if (_token == null) return null;
     final picked = await pickFileForUpload();
     if (picked == null) return null;
@@ -1768,6 +1949,12 @@ class AppState extends ChangeNotifier {
         isCompressed: false,
         mimeType: picked.mimeType,
       ));
+      if (shareWithContacts) {
+        await _shareMyAvatarWith(
+          _contacts.map((c) => c.uuid),
+          avatarFileId: fileId,
+        );
+      }
       return fileId;
     } catch (e) {
       _setError('Avatar upload failed: $e', category: 'file');
@@ -1794,6 +1981,8 @@ class AppState extends ChangeNotifier {
     _conversations.clear();
     _contacts.clear();
     _peerProfiles.clear();
+    _groupDetails.clear();
+    _avatarAccessGrants.clear();
     _onlinePeerIds.clear();
     _activeChatUserId = null;
     _activeGroupId = null;

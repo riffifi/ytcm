@@ -7,7 +7,7 @@ project(runner LANGUAGES CXX)
 set(BINARY_NAME "messenger_client")
 # The unique GTK application identifier for this application. See:
 # https://wiki.gnome.org/HowDoI/ChooseApplicationID
-set(APPLICATION_ID "com.example.messenger_client")
+set(APPLICATION_ID "ru.yechat.YeChat")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -92,6 +92,20 @@ set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
 set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
+  COMPONENT Runtime)
+
+# Desktop environments running on Wayland resolve the app icon from a
+# .desktop file whose filename matches the GTK application ID.
+install(FILES "${CMAKE_SOURCE_DIR}/runner/ru.yechat.YeChat.desktop"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/applications"
+  COMPONENT Runtime)
+install(FILES "${CMAKE_SOURCE_DIR}/../assets/icon/app_icon.png"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/icons/hicolor/512x512/apps"
+  RENAME "ru.yechat.YeChat.png"
+  COMPONENT Runtime)
+install(FILES "${CMAKE_SOURCE_DIR}/../assets/icon/app_icon.png"
+  DESTINATION "${CMAKE_INSTALL_PREFIX}/share/pixmaps"
+  RENAME "ru.yechat.YeChat.png"
   COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"

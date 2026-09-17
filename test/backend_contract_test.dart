@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ytcm/icons/phosphor_assets.dart';
 import 'package:ytcm/models/group_models.dart';
 import 'package:ytcm/models/color_palette.dart';
 import 'package:ytcm/models/models.dart';
@@ -12,6 +13,9 @@ import 'package:ytcm/services/chat_socket_runner.dart';
 import 'package:ytcm/services/file_service.dart';
 import 'package:ytcm/services/file_metadata_cache.dart';
 import 'package:ytcm/services/notification_service.dart';
+import 'package:ytcm/utils/profile_extras.dart';
+import 'package:ytcm/widgets/phosphor_icon.dart';
+import 'package:ytcm/widgets/chat_message_tile.dart';
 
 void main() {
   group('Rust backend contract', () {
@@ -21,6 +25,66 @@ void main() {
       expect(palette.id, ColorPaletteOption.defaultId);
       expect(palette.name, 'Autumn');
       expect(palette.accent, isNot(palette.companion));
+    });
+
+    test('selected navigation icons resolve to bundled fill assets', () {
+      expect(
+        PhosphorIcon.assetPath('chat-circle', PhosphorWeight.fill),
+        'SVGs/fill/chat-circle-fill.svg',
+      );
+    });
+
+    test('connection-test icon resolves to a bundled non-empty asset', () {
+      final path = PhosphorIcon.assetPath(PhosphorAssets.testConnection);
+      final file = File(path);
+
+      expect(path, 'SVGs/regular/pulse.svg');
+      expect(file.existsSync(), isTrue);
+      expect(file.lengthSync(), greaterThan(0));
+      expect(
+        PhosphorIcon.embeddedSvg(PhosphorAssets.pulse),
+        contains('<polyline'),
+      );
+      expect(
+        PhosphorIcon.embeddedSvg(PhosphorAssets.gif),
+        contains('<svg'),
+      );
+      expect(
+        PhosphorIcon.embeddedSvg(PhosphorAssets.more),
+        contains('<svg'),
+      );
+    });
+
+    test('message sequences group only nearby messages from one sender', () {
+      final first = DateTime.utc(2026, 9, 18, 12);
+
+      expect(
+        messagesFormSequence(
+          firstSenderId: 'alice',
+          firstCreatedAt: first,
+          secondSenderId: 'alice',
+          secondCreatedAt: first.add(const Duration(minutes: 4)),
+        ),
+        isTrue,
+      );
+      expect(
+        messagesFormSequence(
+          firstSenderId: 'alice',
+          firstCreatedAt: first,
+          secondSenderId: 'bob',
+          secondCreatedAt: first.add(const Duration(minutes: 1)),
+        ),
+        isFalse,
+      );
+      expect(
+        messagesFormSequence(
+          firstSenderId: 'alice',
+          firstCreatedAt: first,
+          secondSenderId: 'alice',
+          secondCreatedAt: first.add(const Duration(minutes: 6)),
+        ),
+        isFalse,
+      );
     });
 
     test('parses direct and group message payloads', () {
@@ -42,8 +106,8 @@ void main() {
         'text': null,
         'file_id': 'file-id',
         'created_at': '2026-09-16 12:34:56+00',
-        'who_delivered': <String>[],
-        'who_read': <String>[],
+        'who_delivered': <String>['member-a'],
+        'who_read': <String>['member-a'],
         'deleted_for_everyone': false,
         'status': 'sent',
       });
@@ -51,6 +115,51 @@ void main() {
       expect(direct.status, 1);
       expect(direct.createdAt.toUtc().year, 2026);
       expect(groupMessage.previewText, '📎 Attachment');
+      expect(groupMessage.readBy, ['member-a']);
+    });
+
+    test('parses the backend group details and member-role payload', () {
+      final details = GroupDetails.fromJson({
+        'group': {
+          'uuid': 'group-id',
+          'name': 'Design crew',
+          'description': 'Product discussion',
+          'avatar_id': 'avatar-file-id',
+          'created_at': '2026-09-16 12:34:56+00',
+          'is_private': true,
+          'is_channel': false,
+        },
+        'members': [
+          {
+            'group_id': 'group-id',
+            'user_id': 'owner-id',
+            'role': 'owner',
+            'joined_at': '2026-09-16 12:34:56+00',
+          },
+        ],
+      });
+
+      expect(details.group.avatarId, 'avatar-file-id');
+      expect(details.members.single.isOwner, isTrue);
+      expect(details.members.single.isAdmin, isTrue);
+    });
+
+    test('profile extras preserve server-owned additional-info fields', () {
+      final extras = ProfileExtras.parse(jsonEncode({
+        'bio': 'Hello',
+        'avatar_id': 'legacy-avatar-id',
+        'server_flag': true,
+      }));
+      final serialized = jsonDecode(ProfileExtras(
+        bio: 'Updated',
+        avatarFileId: extras.avatarFileId,
+        extraFields: extras.extraFields,
+      ).serialize()) as Map<String, dynamic>;
+
+      expect(extras.avatarFileId, 'legacy-avatar-id');
+      expect(serialized['bio'], 'Updated');
+      expect(serialized['avatar_file_id'], 'legacy-avatar-id');
+      expect(serialized['server_flag'], isTrue);
     });
 
     test('does not use a username where chat requires a UUID', () async {
@@ -129,12 +238,28 @@ void main() {
           final event = jsonDecode(raw as String) as Map<String, dynamic>;
           events.add(event);
           if (event['action'] == 'join') {
-            socket.add(jsonEncode({
-              'type': 'joined',
-              'user_id': 'user-id',
-              'username': 'alice',
-              'connection_number': 1,
-            }));
+            socket
+              ..add(jsonEncode({
+                'type': 'joined',
+                'user_id': 'user-id',
+                'username': 'alice',
+                'connection_number': 1,
+              }))
+              ..add(jsonEncode({
+                'type': 'group_info',
+                'details': {
+                  'group': {
+                    'uuid': 'group-id',
+                    'name': 'Team',
+                    'description': null,
+                    'avatar_id': null,
+                    'created_at': '2026-09-16 12:34:56+00',
+                    'is_private': false,
+                    'is_channel': false,
+                  },
+                  'members': <Map<String, dynamic>>[],
+                },
+              }));
           }
           if (events.length == 2 && !received.isCompleted) {
             received.complete(List.of(events));
@@ -158,6 +283,7 @@ void main() {
       addTearDown(chat.dispose);
       final joined = chat.joinEvents.first;
       final deleted = chat.messageDeleted.first;
+      final groupInfo = chat.groupInfo.first;
       chat.sendMessage(receiverId: 'receiver-id', text: 'queued message');
 
       await chat.connect('session-token');
@@ -176,6 +302,7 @@ void main() {
       });
       expect((await joined).uuid, 'user-id');
       expect((await deleted).messageUuid, 'message-id');
+      expect((await groupInfo).group.name, 'Team');
       expect(chat.isConnected, isTrue);
       await chat.disconnect();
     });

@@ -13,6 +13,7 @@ import 'phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
 import '../screens/chat_screen.dart';
 import '../utils/platform_ui.dart';
+import 'app_bottom_sheet.dart';
 
 bool conversationContextMenuIsDesktop(BuildContext context) {
   if (kIsWeb) return false;
@@ -34,12 +35,9 @@ Future<void> showConversationContextMenu({
 
   if (showPreview) {
     messengerHapticMedium();
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: c.surfaceHigh,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
+    await AppBottomSheet.show<void>(
+      context,
+      title: 'Chat options',
       builder: (sheetContext) {
         return SafeArea(
           child: Padding(
@@ -48,17 +46,6 @@ Future<void> showConversationContextMenu({
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 14),
-                    decoration: BoxDecoration(
-                      color: c.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
                 _PreviewCard(
                   peer: peer,
                   preview: preview,
@@ -90,7 +77,8 @@ Future<void> showConversationContextMenu({
       position.dy,
     ),
     color: c.surfaceHigh,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+    shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.sm)),
     items: _desktopMenuItems(
       c: c,
       unread: unread,
@@ -147,19 +135,19 @@ List<PopupMenuEntry<String>> _desktopMenuItems({
   return [
     PopupMenuItem<String>(
       value: 'open',
-      child: Text('Open chat', style: TextStyle(color: c.primary)),
+      child: Text('Open chat', style: AppTheme.listTitle(c)),
     ),
     if (unread > 0)
       PopupMenuItem<String>(
         value: 'read',
-        child: Text('Mark as read', style: TextStyle(color: c.primary)),
+        child: Text('Mark as read', style: AppTheme.listTitle(c)),
       ),
     if (NotificationPreferences.isMobilePlatform)
       PopupMenuItem<String>(
         value: 'notif',
         child: Text(
           notifEnabled ? 'Turn off notifications' : 'Turn on notifications',
-          style: TextStyle(color: c.primary),
+          style: AppTheme.listTitle(c),
         ),
       ),
   ];
@@ -186,7 +174,7 @@ class _PreviewCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: c.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: c.border),
       ),
       child: Row(
@@ -196,10 +184,7 @@ class _PreviewCard extends StatelessWidget {
             backgroundColor: c.accentSoft,
             child: Text(
               initial,
-              style: TextStyle(
-                color: c.accent,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppTheme.listTitle(c).copyWith(color: c.accent),
             ),
           ),
           const SizedBox(width: 12),
@@ -214,11 +199,7 @@ class _PreviewCard extends StatelessWidget {
                         peer.username,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: c.primary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: AppTheme.listTitle(c, emphasized: true),
                       ),
                     ),
                     if (unread > 0)
@@ -229,15 +210,11 @@ class _PreviewCard extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: c.accent,
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
                         child: Text(
                           unread > 99 ? '99+' : '$unread',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
+                          style: AppTheme.timestamp(c, color: Colors.white),
                         ),
                       ),
                   ],
@@ -247,11 +224,7 @@ class _PreviewCard extends StatelessWidget {
                   preview.isNotEmpty ? preview : 'No messages yet',
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: c.secondary,
-                    fontSize: 13,
-                    height: 1.35,
-                  ),
+                  style: AppTheme.caption(c),
                 ),
               ],
             ),
@@ -334,7 +307,7 @@ class _ActionRow extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
           child: Row(
@@ -343,11 +316,7 @@ class _ActionRow extends StatelessWidget {
               const SizedBox(width: 14),
               Text(
                 label,
-                style: TextStyle(
-                  color: c.primary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
+                style: AppTheme.listTitle(c),
               ),
             ],
           ),

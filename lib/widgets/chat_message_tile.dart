@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../models/models.dart';
+import '../models/group_models.dart';
 import '../icons/phosphor_assets.dart';
 import '../theme.dart';
 import 'phosphor_icon.dart';
@@ -14,6 +15,8 @@ class ChatMessageTile extends StatelessWidget {
   final bool isMe;
   final bool showDate;
   final bool animate;
+  final bool startsSequence;
+  final bool endsSequence;
   final AppColors colors;
   final double maxBubbleWidth;
   final VoidCallback? onLongPress;
@@ -24,6 +27,8 @@ class ChatMessageTile extends StatelessWidget {
     required this.isMe,
     required this.showDate,
     this.animate = false,
+    this.startsSequence = true,
+    this.endsSequence = true,
     required this.colors,
     required this.maxBubbleWidth,
     this.onLongPress,
@@ -32,16 +37,25 @@ class ChatMessageTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bubble = Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: EdgeInsets.only(bottom: endsSequence ? AppSpace.md : 3),
       child: Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxBubbleWidth),
           child: GestureDetector(
             onLongPress: onLongPress,
-            child: _Bubble(
-              message: message,
+            child: ChatBubble(
+              text: message.text,
+              fileId: message.fileId,
+              createdAt: message.createdAt,
+              status: message.status == 2
+                  ? MessageStatus.read
+                  : message.status == 1
+                      ? MessageStatus.sent
+                      : MessageStatus.pending,
               isMe: isMe,
+              startsSequence: startsSequence,
+              endsSequence: endsSequence,
               colors: colors,
             ),
           ),
@@ -52,7 +66,79 @@ class ChatMessageTile extends StatelessWidget {
     return RepaintBoundary(
       child: Column(
         children: [
-          if (showDate) _DateDivider(date: message.createdAt, colors: colors),
+          if (showDate)
+            ChatDateDivider(date: message.createdAt, colors: colors),
+          if (animate)
+            _MessageEnterAnimation(isMe: isMe, child: bubble)
+          else
+            bubble,
+        ],
+      ),
+    );
+  }
+}
+
+class GroupChatMessageTile extends StatelessWidget {
+  final GroupMessage message;
+  final bool isMe;
+  final bool showDate;
+  final bool animate;
+  final bool startsSequence;
+  final bool endsSequence;
+  final String? senderLabel;
+  final AppColors colors;
+  final double maxBubbleWidth;
+  final VoidCallback? onLongPress;
+
+  const GroupChatMessageTile({
+    super.key,
+    required this.message,
+    required this.isMe,
+    required this.showDate,
+    this.animate = false,
+    this.startsSequence = true,
+    this.endsSequence = true,
+    this.senderLabel,
+    required this.colors,
+    required this.maxBubbleWidth,
+    this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final status = message.uuid.startsWith('local-')
+        ? MessageStatus.pending
+        : message.readBy.isNotEmpty
+            ? MessageStatus.read
+            : MessageStatus.sent;
+    final bubble = Padding(
+      padding: EdgeInsets.only(bottom: endsSequence ? AppSpace.md : 3),
+      child: Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+          child: GestureDetector(
+            onLongPress: onLongPress,
+            child: ChatBubble(
+              text: message.text,
+              fileId: message.fileId,
+              createdAt: message.createdAt,
+              status: status,
+              senderLabel: isMe ? null : senderLabel,
+              startsSequence: startsSequence,
+              endsSequence: endsSequence,
+              isMe: isMe,
+              colors: colors,
+            ),
+          ),
+        ),
+      ),
+    );
+    return RepaintBoundary(
+      child: Column(
+        children: [
+          if (showDate)
+            ChatDateDivider(date: message.createdAt, colors: colors),
           if (animate)
             _MessageEnterAnimation(isMe: isMe, child: bubble)
           else
@@ -89,11 +175,11 @@ class _MessageEnterAnimationState extends State<_MessageEnterAnimation>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 200),
+      duration: AppMotion.enter,
     );
     final curve = CurvedAnimation(
       parent: _controller,
-      curve: Curves.easeOutCubic,
+      curve: AppMotion.standard,
     );
     _opacity = Tween<double>(begin: 0, end: 1).animate(curve);
     _scale = Tween<double>(begin: 0.94, end: 1).animate(curve);
@@ -126,42 +212,59 @@ class _MessageEnterAnimationState extends State<_MessageEnterAnimation>
   }
 }
 
-class _Bubble extends StatelessWidget {
-  final Message message;
+enum MessageStatus { pending, sent, read }
+
+class ChatBubble extends StatelessWidget {
+  final String? text;
+  final String? fileId;
+  final DateTime createdAt;
+  final MessageStatus status;
+  final String? senderLabel;
   final bool isMe;
+  final bool startsSequence;
+  final bool endsSequence;
   final AppColors colors;
 
-  const _Bubble({
-    required this.message,
+  const ChatBubble({
+    super.key,
+    this.text,
+    this.fileId,
+    required this.createdAt,
+    required this.status,
+    this.senderLabel,
     required this.isMe,
+    this.startsSequence = true,
+    this.endsSequence = true,
     required this.colors,
   });
 
   @override
   Widget build(BuildContext context) {
-    final time = DateFormat('HH:mm').format(message.createdAt);
-    final hasFile = message.fileId != null && message.fileId!.isNotEmpty;
-    final text = message.text?.trim();
-    final hasText = text != null && text.isNotEmpty;
+    final time = DateFormat('HH:mm').format(createdAt);
+    final hasFile = fileId != null && fileId!.isNotEmpty;
+    final cleanText = text?.trim();
+    final hasText = cleanText != null && cleanText.isNotEmpty;
 
+    final topInner = startsSequence ? AppRadius.lg : AppRadius.sm;
+    final bottomTail = endsSequence ? AppRadius.tail : AppRadius.sm;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+      padding: const EdgeInsets.fromLTRB(14, 9, 12, 7),
       decoration: BoxDecoration(
         color: isMe ? colors.bubbleOut : colors.bubbleIn,
         borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(20),
-          topRight: const Radius.circular(20),
-          bottomLeft: Radius.circular(isMe ? 20 : 7),
-          bottomRight: Radius.circular(isMe ? 7 : 20),
+          topLeft: Radius.circular(isMe ? AppRadius.lg : topInner),
+          topRight: Radius.circular(isMe ? topInner : AppRadius.lg),
+          bottomLeft: Radius.circular(isMe ? AppRadius.lg : bottomTail),
+          bottomRight: Radius.circular(isMe ? bottomTail : AppRadius.lg),
         ),
         border: Border.all(
           color: isMe ? colors.bubbleOutBorder : colors.bubbleInBorder,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: .045),
+            blurRadius: 7,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -170,35 +273,43 @@ class _Bubble extends StatelessWidget {
             isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (senderLabel != null && startsSequence) ...[
+            Text(
+              senderLabel!,
+              style: AppTheme.caption(colors, color: colors.accent),
+            ),
+            const SizedBox(height: AppSpace.xs),
+          ],
           if (hasFile) ...[
             FileAttachment(
-              key: ValueKey('file-${message.fileId}'),
-              fileId: message.fileId!,
+              key: ValueKey('file-$fileId'),
+              fileId: fileId!,
               isMe: isMe,
             ),
             if (hasText) const SizedBox(height: 6),
           ],
           if (hasText)
             MessageBody(
-              text: message.text,
+              text: text,
               colors: colors,
-              textStyle: TextStyle(
-                color: colors.primary,
-                fontSize: 15,
-                height: 1.4,
-              ),
+              textStyle: AppTheme.text(colors, fontSize: 15, height: 1.4),
             ),
-          if (hasText) const SizedBox(height: 4),
+          if (hasText) const SizedBox(height: 3),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
                 time,
-                style: TextStyle(color: colors.tertiary, fontSize: 10),
+                style: AppTheme.timestamp(
+                  colors,
+                  color: isMe
+                      ? colors.primary.withValues(alpha: .58)
+                      : colors.tertiary,
+                ),
               ),
               if (isMe) ...[
                 const SizedBox(width: 4),
-                _StatusIcon(status: message.status, colors: colors),
+                _StatusIcon(status: status, colors: colors),
               ],
             ],
           ),
@@ -209,21 +320,21 @@ class _Bubble extends StatelessWidget {
 }
 
 class _StatusIcon extends StatelessWidget {
-  final int status;
+  final MessageStatus status;
   final AppColors colors;
 
   const _StatusIcon({required this.status, required this.colors});
 
   @override
   Widget build(BuildContext context) {
-    if (status == 2) {
+    if (status == MessageStatus.read) {
       return PhosphorIcon(
         PhosphorAssets.checks,
         size: 12,
         color: colors.accent,
       );
     }
-    if (status == 1) {
+    if (status == MessageStatus.sent) {
       return PhosphorIcon(
         PhosphorAssets.checks,
         size: 12,
@@ -238,11 +349,11 @@ class _StatusIcon extends StatelessWidget {
   }
 }
 
-class _DateDivider extends StatelessWidget {
+class ChatDateDivider extends StatelessWidget {
   final DateTime date;
   final AppColors colors;
 
-  const _DateDivider({required this.date, required this.colors});
+  const ChatDateDivider({super.key, required this.date, required this.colors});
 
   @override
   Widget build(BuildContext context) {
@@ -270,11 +381,7 @@ class _DateDivider extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: Text(
               label,
-              style: TextStyle(
-                color: colors.tertiary,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
+              style: AppTheme.timestamp(colors),
             ),
           ),
           Expanded(child: Divider(color: colors.border)),
@@ -303,6 +410,17 @@ int chatMessageFingerprint(List<Message> messages, {String? meId}) {
 
 bool sameChatDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
+
+bool messagesFormSequence({
+  required String firstSenderId,
+  required DateTime firstCreatedAt,
+  required String secondSenderId,
+  required DateTime secondCreatedAt,
+}) =>
+    firstSenderId == secondSenderId &&
+    sameChatDay(firstCreatedAt, secondCreatedAt) &&
+    secondCreatedAt.difference(firstCreatedAt).abs() <=
+        const Duration(minutes: 5);
 
 /// Animate only small batches of new messages (not full history load).
 bool shouldAnimateChatMessage({

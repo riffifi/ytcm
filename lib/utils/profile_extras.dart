@@ -4,12 +4,17 @@ import 'dart:convert';
 class ProfileExtras {
   final String? bio;
   final String? avatarFileId;
+  final Map<String, dynamic> extraFields;
 
-  const ProfileExtras({this.bio, this.avatarFileId});
+  const ProfileExtras({
+    this.bio,
+    this.avatarFileId,
+    this.extraFields = const {},
+  });
 
-  static String? _clean(String? value) {
+  static String? _clean(dynamic value) {
     if (value == null) return null;
-    final t = value.trim();
+    final t = value.toString().trim();
     if (t.isEmpty || t == 'null') return null;
     return t;
   }
@@ -23,8 +28,13 @@ class ProfileExtras {
         final decoded = jsonDecode(raw);
         if (decoded is Map<String, dynamic>) {
           return ProfileExtras(
-            bio: _clean(decoded['bio'] as String?),
-            avatarFileId: _clean(decoded['avatar_file_id'] as String?),
+            bio: _clean(decoded['bio']),
+            avatarFileId:
+                _clean(decoded['avatar_file_id'] ?? decoded['avatar_id']),
+            extraFields: Map<String, dynamic>.from(decoded)
+              ..remove('bio')
+              ..remove('avatar_file_id')
+              ..remove('avatar_id'),
           );
         }
       } catch (_) {}
@@ -36,7 +46,7 @@ class ProfileExtras {
   String serialize({String? bio, String? avatarFileId}) {
     final b = _clean(bio) ?? this.bio;
     final a = _clean(avatarFileId) ?? this.avatarFileId;
-    final map = <String, String>{};
+    final map = <String, dynamic>{...extraFields};
     if (b != null) map['bio'] = b;
     if (a != null) map['avatar_file_id'] = a;
     if (map.isEmpty) return '';

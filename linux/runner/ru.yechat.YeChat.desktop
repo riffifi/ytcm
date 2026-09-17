@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=YeChat
+GenericName=Messenger
+Comment=Conversations that feel close
+Exec=messenger_client
+Icon=ru.yechat.YeChat
+Terminal=false
+Categories=Network;InstantMessaging;Chat;
+StartupNotify=true
+StartupWMClass=ru.yechat.YeChat

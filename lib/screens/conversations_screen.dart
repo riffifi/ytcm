@@ -13,6 +13,8 @@ import '../widgets/user_avatar.dart';
 import '../utils/profile_extras.dart';
 import 'settings_screen.dart';
 import '../utils/platform_ui.dart';
+import '../widgets/app_components.dart';
+import '../widgets/app_bottom_sheet.dart';
 
 class ConversationsScreen extends StatefulWidget {
   final bool selectionMode;
@@ -32,31 +34,10 @@ class ConversationsScreen extends StatefulWidget {
     BuildContext context, {
     ValueChanged<ConversationPeer>? onPeerSelected,
   }) {
-    final c = context.mc;
-    final sheet = _NewChatSheet(onPeerSelected: onPeerSelected);
-    if (isWideLayout(context)) {
-      showDialog<void>(
-        context: context,
-        builder: (ctx) => Dialog(
-          backgroundColor: c.surface,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
-            child: sheet,
-          ),
-        ),
-      );
-      return;
-    }
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: c.surfaceHigh,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => sheet,
+    AppBottomSheet.show<void>(
+      context,
+      title: 'Start new chat',
+      builder: (_) => _NewChatSheet(onPeerSelected: onPeerSelected),
     );
   }
 
@@ -131,7 +112,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
         title: Row(
           children: [
             ClipRRect(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               child: Image.asset(
                 'assets/icon/app_icon.png',
                 width: 38,
@@ -256,7 +237,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                   onRefresh: () async {
                     context.read<AppState>().chat.listConnections();
                     await Future<void>.delayed(
-                      const Duration(milliseconds: 400),
+                      AppMotion.theme,
                     );
                   },
                   child: ListView.builder(
@@ -274,6 +255,7 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
       floatingActionButton: widget.selectionMode
           ? null
           : FloatingActionButton.extended(
+              heroTag: 'new-direct-message',
               onPressed: () {
                 messengerHapticMedium();
                 ConversationsScreen.showNewChatModal(context);
@@ -285,57 +267,22 @@ class _ConversationsScreenState extends State<ConversationsScreen> {
                 color: Colors.white,
                 size: 20,
               ),
-              label: const Text(
+              label: Text(
                 'New chat',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
+                style: AppTheme.text(c,
+                    color: Colors.white,
+                    wght: AppFontWeight.semibold,
+                    fontSize: 14),
               ),
             ),
     );
   }
 
   Widget _emptyState(BuildContext context) {
-    final c = context.mc;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: c.surfaceHigh,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: PhosphorIcon(
-                PhosphorAssets.chat,
-                color: c.secondary,
-                size: 28,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'No conversations yet',
-              style: TextStyle(
-                color: c.primary,
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Tap + and enter a username, email, or user ID from their Profile.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: c.secondary, fontSize: 13),
-            ),
-          ],
-        ),
-      ),
+    return const EmptyState(
+      icon: PhosphorAssets.chat,
+      title: 'No conversations yet',
+      message: 'Start a chat with a username or user ID from their profile.',
     );
   }
 }
@@ -428,136 +375,101 @@ class _NewChatSheetState extends State<_NewChatSheet> {
     final state = context.watch<AppState>();
     final online = state.contacts;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: sheetColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              Text(
-                'Start new chat',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: sheetColors.primary,
-                ),
-              ),
-              if (online.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                Text(
-                  'Connected now (optional)',
-                  style: TextStyle(
-                    color: sheetColors.secondary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'You can also message offline users by username below.',
-                  style: TextStyle(
-                    color: sheetColors.secondary,
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final peer in online)
-                      ActionChip(
-                        label: Text(peer.username),
-                        avatar: CircleAvatar(
-                          backgroundColor: sheetColors.accentSoft,
-                          child: Text(
-                            peer.username.isNotEmpty
-                                ? peer.username[0].toUpperCase()
-                                : '?',
-                            style: TextStyle(
-                              color: sheetColors.accent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        onPressed:
-                            _starting ? null : () => _openOnlinePeer(peer),
-                      ),
-                  ],
-                ),
-              ],
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (online.isNotEmpty) ...[
               const SizedBox(height: 14),
-              TextField(
-                controller: _controller,
-                autofocus: online.isEmpty,
-                style: TextStyle(color: sheetColors.primary),
-                decoration: InputDecoration(
-                  hintText: 'Username, email, or user ID',
-                  errorText: _error,
-                  filled: true,
-                  fillColor: sheetColors.bg,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(color: sheetColors.border),
-                  ),
-                ),
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _runStart(_controller.text.trim()),
+              Text(
+                'Connected now (optional)',
+                style: AppTheme.caption(sheetColors),
               ),
-              const SizedBox(height: 12),
-              Row(
+              const SizedBox(height: 4),
+              Text(
+                'You can also message offline users by username below.',
+                style: AppTheme.timestamp(sheetColors),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
                 children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed:
-                          _starting ? null : () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: sheetColors.accent,
+                  for (final peer in online)
+                    ActionChip(
+                      label: Text(peer.username),
+                      avatar: CircleAvatar(
+                        backgroundColor: sheetColors.accentSoft,
+                        child: Text(
+                          peer.username.isNotEmpty
+                              ? peer.username[0].toUpperCase()
+                              : '?',
+                          style: AppTheme.timestamp(sheetColors,
+                              color: sheetColors.accent),
+                        ),
                       ),
-                      onPressed: _starting
-                          ? null
-                          : () => _runStart(_controller.text.trim()),
-                      child: _starting
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Text(
-                              'Start',
-                              style: TextStyle(color: Colors.white),
-                            ),
+                      onPressed: _starting ? null : () => _openOnlinePeer(peer),
                     ),
-                  ),
                 ],
               ),
             ],
-          ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _controller,
+              autofocus: online.isEmpty,
+              style: AppTheme.text(sheetColors),
+              decoration: InputDecoration(
+                hintText: 'Username, email, or user ID',
+                errorText: _error,
+                filled: true,
+                fillColor: sheetColors.bg,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                  borderSide: BorderSide(color: sheetColors.border),
+                ),
+              ),
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _runStart(_controller.text.trim()),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _starting ? null : () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: sheetColors.accent,
+                    ),
+                    onPressed: _starting
+                        ? null
+                        : () => _runStart(_controller.text.trim()),
+                    child: _starting
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Text(
+                            'Start',
+                            style:
+                                AppTheme.text(sheetColors, color: Colors.white),
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -595,7 +507,7 @@ class _ConversationTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Material(
         color: selected ? c.accentSoft : c.surface,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           mouseCursor: SystemMouseCursors.click,
@@ -668,24 +580,15 @@ class _ConversationTile extends StatelessWidget {
                               displayName,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: c.primary,
-                                fontSize: 15,
-                                height: 1.2,
-                                fontWeight: unread > 0
-                                    ? FontWeight.w600
-                                    : FontWeight.w500,
-                              ),
+                              style:
+                                  AppTheme.listTitle(c, emphasized: unread > 0),
                             ),
                           ),
                           if (lastMsg != null)
                             Text(
                               _formatTime(lastMsg.createdAt),
-                              style: TextStyle(
-                                color: unread > 0 ? c.accent : c.tertiary,
-                                fontSize: 11,
-                                height: 1.2,
-                              ),
+                              style: AppTheme.timestamp(c,
+                                  color: unread > 0 ? c.accent : c.tertiary),
                             ),
                         ],
                       ),
@@ -698,11 +601,10 @@ class _ConversationTile extends StatelessWidget {
                               preview,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: unread > 0 ? c.primary : c.secondary,
-                                fontSize: 13,
-                                height: 1.2,
-                              ),
+                              style: AppTheme.text(c,
+                                  color: unread > 0 ? c.primary : c.secondary,
+                                  fontSize: 13,
+                                  height: 1.2),
                             ),
                           ),
                           if (unread > 0) ...[
@@ -754,17 +656,12 @@ class _UnreadBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
         color: c.accent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       alignment: Alignment.center,
       child: Text(
         label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          height: 1,
-        ),
+        style: AppTheme.timestamp(c, color: Colors.white),
       ),
     );
   }

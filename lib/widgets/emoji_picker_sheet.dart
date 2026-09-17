@@ -1,10 +1,9 @@
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/material.dart';
 
-import '../icons/phosphor_assets.dart';
 import '../theme.dart';
-import 'phosphor_icon.dart';
 import '../utils/messenger_haptics.dart';
+import 'app_bottom_sheet.dart';
 
 /// Full-width emoji panel (bottom sheet) — avoids inline rebuild lag in the composer.
 class EmojiPickerSheet extends StatelessWidget {
@@ -17,12 +16,10 @@ class EmojiPickerSheet extends StatelessWidget {
     required ValueChanged<Emoji> onEmojiSelected,
   }) {
     messengerHapticSelection();
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      useSafeArea: true,
-      builder: (ctx) => EmojiPickerSheet(onEmojiSelected: onEmojiSelected),
+    return AppBottomSheet.show<void>(
+      context,
+      title: 'Emoji',
+      builder: (_) => EmojiPickerSheet(onEmojiSelected: onEmojiSelected),
     );
   }
 
@@ -33,51 +30,10 @@ class EmojiPickerSheet extends StatelessWidget {
     final height =
         (MediaQuery.sizeOf(context).height * 0.42).clamp(280.0, 380.0);
 
-    return Container(
+    return SizedBox(
       height: height + bottom,
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: c.primary.withValues(alpha: 0.12),
-            blurRadius: 24,
-            offset: const Offset(0, -6),
-          ),
-        ],
-      ),
       child: Column(
         children: [
-          const SizedBox(height: 10),
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(
-              color: c.border,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-            child: Row(
-              children: [
-                Text(
-                  'Emoji',
-                  style: AppTheme.appBarTitle(c, fontSize: 16),
-                ),
-                const Spacer(),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: PhosphorIcon(
-                    PhosphorAssets.close,
-                    color: c.secondary,
-                    size: 22,
-                  ),
-                  tooltip: 'Close',
-                ),
-              ],
-            ),
-          ),
           Expanded(
             child: EmojiPicker(
               onEmojiSelected: (_, emoji) {

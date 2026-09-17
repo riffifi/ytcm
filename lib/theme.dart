@@ -107,6 +107,58 @@ extension MessengerTheme on BuildContext {
   }
 }
 
+abstract final class AppRadius {
+  static const xs = 8.0;
+  static const sm = 12.0;
+  static const md = 16.0;
+  static const lg = 20.0;
+  static const xl = 28.0;
+  static const tail = 7.0;
+}
+
+abstract final class AppSpace {
+  static const xs = 4.0;
+  static const sm = 8.0;
+  static const md = 12.0;
+  static const lg = 16.0;
+  static const xl = 24.0;
+  static const xxl = 32.0;
+}
+
+abstract final class AppMotion {
+  static const fast = Duration(milliseconds: 120);
+  static const base = Duration(milliseconds: 180);
+  static const enter = Duration(milliseconds: 220);
+  static const theme = Duration(milliseconds: 260);
+  static const standard = Curves.easeOutCubic;
+  static const emphasized = Curves.easeOutBack;
+}
+
+abstract final class AppShadow {
+  static List<BoxShadow> level1(AppColors c) => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.06),
+          blurRadius: 12,
+          offset: const Offset(0, 4),
+        ),
+      ];
+
+  static List<BoxShadow> level2(AppColors c) => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.14),
+          blurRadius: 32,
+          offset: const Offset(0, 14),
+        ),
+      ];
+
+  static List<BoxShadow> accentGlow(AppColors c) => [
+        BoxShadow(
+          color: c.accent.withValues(alpha: 0.18),
+          blurRadius: 36,
+        ),
+      ];
+}
+
 /// Geist variable-font weight tokens ([wght] axis, 100–900).
 abstract final class AppFontWeight {
   static const body = 400.0;
@@ -192,6 +244,28 @@ class AppTheme {
         color: c.secondary,
         fontSize: 11,
         letterSpacing: 0.85,
+        height: 1.2,
+      );
+
+  static TextStyle caption(AppColors c, {Color? color}) => text(
+        c,
+        color: color ?? c.secondary,
+        fontSize: 12,
+        wght: 450,
+        height: 1.35,
+      );
+
+  static TextStyle listTitle(AppColors c, {bool emphasized = false}) => text(
+        c,
+        fontSize: 15,
+        wght: emphasized ? AppFontWeight.semibold : AppFontWeight.medium,
+        height: 1.2,
+      );
+
+  static TextStyle timestamp(AppColors c, {Color? color}) => text(
+        c,
+        color: color ?? c.tertiary,
+        fontSize: 11,
         height: 1.2,
       );
 
@@ -298,13 +372,15 @@ class AppTheme {
         backgroundColor: c.surfaceHigh,
         contentTextStyle: text(c, fontSize: 14),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md)),
         insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 18),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: c.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.xl)),
         titleTextStyle: appBarTitle(c),
         contentTextStyle: text(c, fontSize: 15, height: 1.45),
       ),
@@ -313,7 +389,8 @@ class AppTheme {
         modalBackgroundColor: c.surface,
         surfaceTintColor: Colors.transparent,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius:
+              BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
         ),
       ),
       cardTheme: CardThemeData(
@@ -322,7 +399,7 @@ class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           side: BorderSide(color: c.borderSoft),
         ),
       ),
@@ -345,15 +422,15 @@ class AppTheme {
         fillColor: c.surfaceHigh,
         hintStyle: text(c, color: c.tertiary, fontSize: 15),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: BorderSide(color: c.border, width: 1),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppRadius.md),
           borderSide: BorderSide(color: c.accent, width: 1.5),
         ),
         contentPadding:
@@ -378,7 +455,7 @@ class AppTheme {
           elevation: 0,
           minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
           textStyle: text(
             c,
@@ -406,7 +483,7 @@ class AppTheme {
           minimumSize: const Size(0, 50),
           side: BorderSide(color: c.border),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
           textStyle: text(c, fontSize: 14, wght: AppFontWeight.semibold),
         ),
@@ -431,18 +508,38 @@ class AppTheme {
           );
         }),
       ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: c.surface,
+        indicatorColor: c.accentSoft,
+        selectedIconTheme: IconThemeData(color: c.accent, size: 22),
+        unselectedIconTheme: IconThemeData(color: c.tertiary, size: 22),
+        selectedLabelTextStyle: text(
+          c,
+          color: c.accent,
+          fontSize: 12,
+          wght: AppFontWeight.semibold,
+        ),
+        unselectedLabelTextStyle: text(
+          c,
+          color: c.tertiary,
+          fontSize: 12,
+          wght: AppFontWeight.medium,
+        ),
+      ),
       chipTheme: ChipThemeData(
         backgroundColor: c.surfaceHigh,
         selectedColor: c.accentSoft,
         side: BorderSide(color: c.borderSoft),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.md)),
         labelStyle: text(c, fontSize: 13, wght: AppFontWeight.medium),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: c.accent,
         foregroundColor: Colors.white,
         elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.lg)),
       ),
     );
   }
