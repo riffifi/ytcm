@@ -60,19 +60,6 @@ class SettingsScreen extends StatelessWidget {
               64,
             ),
             children: [
-              Text(
-                'Your YeChat',
-                style: AppTheme.display(c, fontSize: 30),
-              ),
-              const SizedBox(height: AppSpace.xs),
-              Text(
-                'Make the app feel right and keep your connection in view.',
-                style: AppTheme.text(
-                  c,
-                  color: c.secondary,
-                  fontSize: 14,
-                ),
-              ),
               if (me != null) ...[
                 const SizedBox(height: AppSpace.xl),
                 _AccountCard(

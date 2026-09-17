@@ -112,7 +112,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 370),
                       child: Text(
-                        'Simple, fast messaging for conversations that matter.',
+                        'Simple, fast (at times), unfinished at the moment.\nBut we are working on it.',
                         textAlign: TextAlign.center,
                         style: AppTheme.text(
                           c,
@@ -219,7 +219,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               ),
                             ),
                             const SizedBox(height: 24),
-                            _modeSwitch(c),
+                            _modeSwitch(c), // fix me: refer to (auth_screen.dart, #1)
                           ],
                         ),
                       ),
@@ -385,7 +385,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _modeSwitch(AppColors c) => Row(
+  Widget _modeSwitch(AppColors c) => Row( // fix me: smooth natural animation (auth_screen.dart, #1)
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(
@@ -439,7 +439,7 @@ class _AuthScreenState extends State<AuthScreen> {
             onPressed: onToggle,
             icon: PhosphorIcon(
               hidden ? PhosphorAssets.eye : PhosphorAssets.eyeSlash,
-              size: 20,
+              size: 20, // fix me: eye icon too small (auth_screen.dart, #2)
             ),
           ),
         ),
