@@ -1,6 +1,4 @@
 import 'dart:async';
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -78,8 +76,7 @@ class ServerSettings extends ChangeNotifier {
   }
 
   bool get _allowDesktopDefaults {
-    if (kIsWeb) return true;
-    return Platform.isLinux || Platform.isMacOS || Platform.isWindows;
+    return true;
   }
 
   Future<void> save(

@@ -35,40 +35,45 @@ class NotificationService {
   Future<void> init() async {
     if (!isSupported || _initialized) return;
 
-    // flutter_local_notifications expects a drawable resource *name*, not an
-    // Android resource reference such as "@drawable/ic_stat_chat".
-    const android = AndroidInitializationSettings(androidSmallIcon);
-    const ios = DarwinInitializationSettings();
-    final initialized = await _plugin.initialize(
-      const InitializationSettings(android: android, iOS: ios),
-    );
-    if (initialized != true) {
-      debugPrint('NotificationService: plugin initialization failed');
-      return;
-    }
-
-    if (Platform.isIOS) {
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              IOSFlutterLocalNotificationsPlugin>()
-          ?.requestPermissions(alert: true, badge: true, sound: true);
-    }
-
-    if (Platform.isAndroid) {
-      await _android?.createNotificationChannel(
-        const AndroidNotificationChannel(
-          _channelId,
-          _channelName,
-          description: 'New chat messages',
-          importance: Importance.max,
-          playSound: true,
-          enableVibration: true,
-          enableLights: true,
-        ),
+    try {
+      // flutter_local_notifications expects a drawable resource *name*, not
+      // an Android resource reference such as "@drawable/ic_stat_chat".
+      const android = AndroidInitializationSettings(androidSmallIcon);
+      const ios = DarwinInitializationSettings();
+      final initialized = await _plugin.initialize(
+        const InitializationSettings(android: android, iOS: ios),
       );
-    }
+      if (initialized != true) {
+        debugPrint('NotificationService: plugin initialization failed');
+        return;
+      }
 
-    _initialized = true;
+      if (Platform.isIOS) {
+        await _plugin
+            .resolvePlatformSpecificImplementation<
+                IOSFlutterLocalNotificationsPlugin>()
+            ?.requestPermissions(alert: true, badge: true, sound: true);
+      }
+
+      if (Platform.isAndroid) {
+        await _android?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            _channelId,
+            _channelName,
+            description: 'New chat messages',
+            importance: Importance.max,
+            playSound: true,
+            enableVibration: true,
+            enableLights: true,
+          ),
+        );
+      }
+
+      _initialized = true;
+    } catch (error, stackTrace) {
+      // Notifications must not prevent the main application from starting.
+      debugPrint('NotificationService.init failed: $error\n$stackTrace');
+    }
   }
 
   Future<bool> requestPermission() async {
